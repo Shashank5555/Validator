@@ -68,10 +68,6 @@ function prettyPrintXml() {
       return;
     }
     const formatted = formatXml(xmlValue);
-    if (formatted === xmlValue.trim()) {
-      setStatus('XML already formatted.');
-      return;
-    }
     editor.setValue(formatted);
     setStatus('XML formatted.');
   } catch (error) {
