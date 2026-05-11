@@ -284,11 +284,12 @@ def _build_check_errors(xml_text: str, checks: Dict[str, object], existing_error
         return any(label in err for err in existing_errors) or any(label in err for err in errors)
 
     def add_error(line_no: Optional[int], message: str, found: Optional[str] = None) -> None:
-        if line_no is None:
-            line_no = 1
         if found is not None:
             message = f"{message} Found: {found}"
-        errors.append(f"Line {line_no} - {message}")
+        if line_no is None:
+            errors.append(message)
+        else:
+            errors.append(f"Line {line_no} - {message}")
 
     def tag_line(tag: str) -> Tuple[Optional[int], Optional[str]]:
         return _find_first_tag_line(xml_text, tag)
@@ -435,13 +436,13 @@ def _payment_date_status(xml_text: str) -> Dict[str, object]:
     if line_no is None:
         line_no, value = _find_first_tag_line(xml_text, "ReqdColltnDt")
     if not value:
-        return {"passed": False, "reason": "missing", "line": line_no or 1, "value": None}
+        return {"passed": False, "reason": "missing", "line": line_no, "value": None}
     parsed = _parse_iso_date(value)
     if parsed is None:
-        return {"passed": False, "reason": "invalid_format", "line": line_no or 1, "value": value}
+        return {"passed": False, "reason": "invalid_format", "line": line_no, "value": value}
     if parsed < _current_date():
-        return {"passed": False, "reason": "past_date", "line": line_no or 1, "value": value}
-    return {"passed": True, "reason": "ok", "line": line_no or 1, "value": value}
+        return {"passed": False, "reason": "past_date", "line": line_no, "value": value}
+    return {"passed": True, "reason": "ok", "line": line_no, "value": value}
 
 
 def _payment_date_results(xml_text: str) -> Dict[str, object]:

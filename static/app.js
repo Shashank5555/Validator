@@ -409,12 +409,6 @@ function switchTab(tabName) {
   });
 }
 
-function togglePanel() {
-  sidePanel.classList.toggle('collapsed');
-  const icon = document.getElementById('collapse-icon');
-  icon.textContent = sidePanel.classList.contains('collapsed') ? '⟩' : '⟨';
-}
-
 fileInput.addEventListener('change', (event) => {
   const file = event.target.files[0];
   handleFileSelection(file);
@@ -440,7 +434,6 @@ bindClick('theme-toggle', () => {
   const currentTheme = document.body.dataset.theme || DEFAULT_THEME;
   applyTheme(currentTheme === 'light' ? 'dark' : 'light');
 });
-bindClick('collapse-btn', togglePanel);
 
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
