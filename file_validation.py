@@ -3,9 +3,10 @@ import re
 import shutil
 import uuid
 from pathlib import Path
+from typing import Dict
 
 from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from utils.file_validation_util import (
@@ -24,7 +25,7 @@ UPLOAD_DIR = "temp_uploads"
 REPORT_DIR = "files/pain_001_output_reports"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(REPORT_DIR, exist_ok=True)
-REPORT_ROOT = Path(REPORT_DIR).resolve()
+REPORT_REGISTRY: Dict[str, Dict[str, Dict[str, object]]] = {"html": {}, "csv": {}}
 
 
 def _sanitize_upload_name(filename: str, fallback: str) -> str:
@@ -35,14 +36,25 @@ def _sanitize_upload_name(filename: str, fallback: str) -> str:
     return safe_name
 
 
-def _resolve_report_path(filename: str, label: str) -> Path:
+def _register_report(report_type: str, file_path: str, media_type: str) -> str:
+    safe_name = os.path.basename(file_path)
+    with open(file_path, "rb") as handle:
+        content = handle.read()
+    REPORT_REGISTRY.setdefault(report_type, {})[safe_name] = {
+        "content": content,
+        "media_type": media_type,
+    }
+    return safe_name
+
+
+def _get_report_entry(report_type: str, filename: str, label: str) -> tuple[Dict[str, object], str]:
     safe_name = os.path.basename(filename)
     if safe_name != filename:
         raise HTTPException(status_code=400, detail=f"Invalid {label} report filename.")
-    report_path = (REPORT_ROOT / safe_name).resolve()
-    if not report_path.is_relative_to(REPORT_ROOT):
-        raise HTTPException(status_code=400, detail=f"Invalid {label} report filename.")
-    return report_path
+    entry = REPORT_REGISTRY.get(report_type, {}).get(safe_name)
+    if not entry:
+        raise HTTPException(status_code=404, detail=f"{label} report not found.")
+    return entry, safe_name
 
 
 @router.post("/validate")
@@ -53,7 +65,8 @@ async def validate_file(file: UploadFile = File(...)):
     if ext not in [".xml", ".csv"]:
         raise HTTPException(status_code=400, detail="Only XML or CSV files are supported.")
 
-    file_path = os.path.join(UPLOAD_DIR, f"{unique_id}_{safe_filename}")
+    storage_name = f"{unique_id}{'.csv' if ext == '.csv' else '.xml'}"
+    file_path = os.path.join(UPLOAD_DIR, storage_name)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
@@ -86,6 +99,8 @@ async def validate_file(file: UploadFile = File(...)):
         errors,
         diffs,
     )
+    html_name = _register_report("html", html_path, "text/html")
+    csv_name = _register_report("csv", csv_report_path, "text/csv")
 
     # Build response
     return {
@@ -107,25 +122,23 @@ async def validate_file(file: UploadFile = File(...)):
             "Duplicate EndToEndId": extra_info.get("duplicate_e2e_passed"),
             "Payment Dates": extra_info.get("payment_date_results", {}),
         },
-        "html_report_url": f"/files/download/html/{os.path.basename(html_path)}",
-        "csv_report_url": f"/files/download/csv/{os.path.basename(csv_report_path)}",
+        "html_report_url": f"/files/download/html/{html_name}",
+        "csv_report_url": f"/files/download/csv/{csv_name}",
     }
 
 
 @router.get("/download/html/{filename}")
 async def download_html(filename: str):
-    report_path = _resolve_report_path(filename, "HTML")
-    if not report_path.exists():
-        raise HTTPException(status_code=404, detail="HTML report not found.")
-    return FileResponse(path=report_path, media_type="text/html", filename=report_path.name)
+    entry, safe_name = _get_report_entry("html", filename, "HTML")
+    headers = {"Content-Disposition": f'inline; filename="{safe_name}"'}
+    return Response(content=entry["content"], media_type=entry["media_type"], headers=headers)
 
 
 @router.get("/download/csv/{filename}")
 async def download_csv(filename: str):
-    report_path = _resolve_report_path(filename, "CSV")
-    if not report_path.exists():
-        raise HTTPException(status_code=404, detail="CSV report not found.")
-    return FileResponse(path=report_path, media_type="text/csv", filename=report_path.name)
+    entry, safe_name = _get_report_entry("csv", filename, "CSV")
+    headers = {"Content-Disposition": f'attachment; filename="{safe_name}"'}
+    return Response(content=entry["content"], media_type=entry["media_type"], headers=headers)
 
 
 def parse_structured_errors(errors: list):
