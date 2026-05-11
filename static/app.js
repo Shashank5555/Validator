@@ -331,7 +331,7 @@ function setReportLink(anchor, path) {
     anchor.setAttribute('aria-disabled', 'true');
     return;
   }
-  if (!['http:', 'https:'].includes(url.protocol) || (!path.startsWith(REPORT_PATH_PREFIX) && url.origin !== window.location.origin)) {
+  if (!['http:', 'https:'].includes(url.protocol) || !url.pathname.startsWith(REPORT_PATH_PREFIX)) {
     anchor.removeAttribute('href');
     anchor.classList.add('disabled');
     anchor.setAttribute('aria-disabled', 'true');

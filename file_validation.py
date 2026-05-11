@@ -44,14 +44,10 @@ def _safe_report_path(filename: str) -> Tuple[str, str]:
     if safe_name != filename or not FILENAME_SAFE_RE.match(safe_name):
         raise HTTPException(status_code=400, detail="Invalid report filename.")
     report_root = Path(REPORT_DIR).resolve()
-    file_path = (report_root / safe_name).resolve()
-    try:
-        file_path.relative_to(report_root)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid report filename.")
-    if not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Report not found.")
-    return str(file_path), safe_name
+    for entry in report_root.iterdir():
+        if entry.is_file() and entry.name == safe_name:
+            return str(entry.resolve()), safe_name
+    raise HTTPException(status_code=404, detail="Report not found.")
 
 
 def _sanitize_upload_name(filename: str, fallback: str) -> str:
@@ -77,7 +73,7 @@ async def validate_file(file: UploadFile = File(...)):
 
         # Get version
         if ext == ".csv":
-            version = get_version_from_filename(safe_filename) or prompt_for_version(file.filename)
+            version = get_version_from_filename(safe_filename) or prompt_for_version(safe_filename)
             if not version:
                 return JSONResponse(status_code=400, content={"error": "Could not determine version from filename."})
             from utils.file_validation_util import generate_xml_from_csv
@@ -86,7 +82,7 @@ async def validate_file(file: UploadFile = File(...)):
             if not xml_path:
                 return JSONResponse(status_code=500, content={"error": "Failed to generate XML from CSV."})
         else:
-            version = get_version_from_xml(file_path) or prompt_for_version(file.filename)
+            version = get_version_from_xml(file_path) or prompt_for_version(safe_filename)
             if not version:
                 return JSONResponse(status_code=400, content={"error": "Could not determine version from XML."})
             xml_path = file_path
