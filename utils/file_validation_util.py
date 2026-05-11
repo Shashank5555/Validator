@@ -44,6 +44,7 @@ def validate_and_compare(xml_path: str, version: str) -> Tuple[bool, List[str], 
     checks = _build_checks(root, xml_text)
     extra_info.update(checks)
     errors.extend(_duplicate_errors(xml_text))
+    errors.extend(_build_check_errors(checks, errors))
 
     passed = len(errors) == 0 and _checks_all_passed(checks)
     return passed, errors, diffs, extra_info
@@ -273,6 +274,41 @@ def _checks_all_passed(checks: Dict[str, object]) -> bool:
             if nested:
                 results.append(all(nested))
     return all(results) if results else True
+
+
+def _build_check_errors(checks: Dict[str, object], existing_errors: List[str]) -> List[str]:
+    label_map = {
+        "nboftxs_passed": "NbOfTxs",
+        "ctrlsum_passed": "CtrlSum",
+        "purpose_code_passed": "Purpose Code",
+        "utf8_encoding_passed": "UTF-8 Encoding",
+        "currency_code_passed": "Currency Code",
+        "duplicate_msgid_passed": "Duplicate Message ID",
+        "iban_passed": "IBAN checksum",
+        "mmbid_passed": "MmbId",
+        "country_code_passed": "Country Code",
+        "duplicate_e2e_passed": "Duplicate EndToEndId",
+        "payment_date_results": "Payment Dates",
+    }
+    errors: List[str] = []
+
+    def has_label(label: str) -> bool:
+        return any(label in err for err in existing_errors)
+
+    for key, label in label_map.items():
+        value = checks.get(key)
+        if isinstance(value, bool):
+            if value is False and not has_label(label):
+                errors.append(f"Check failed: {label}.")
+            continue
+        if isinstance(value, dict):
+            passed_value = value.get("passed")
+            if passed_value is False and not has_label(label):
+                details = value.get("details")
+                detail_suffix = f" Details: {details}" if isinstance(details, str) and details else ""
+                errors.append(f"Check failed: {label}.{detail_suffix}")
+
+    return errors
 
 
 def _has_numeric(root, tag: str) -> bool:
