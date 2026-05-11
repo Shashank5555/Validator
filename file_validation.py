@@ -24,6 +24,7 @@ UPLOAD_DIR = "temp_uploads"
 REPORT_DIR = "files/pain_001_output_reports"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(REPORT_DIR, exist_ok=True)
+REPORT_ROOT = Path(REPORT_DIR).resolve()
 
 
 def _sanitize_upload_name(filename: str, fallback: str) -> str:
@@ -32,6 +33,16 @@ def _sanitize_upload_name(filename: str, fallback: str) -> str:
     if not safe_name or not re.search(r"[A-Za-z0-9]", safe_name):
         return fallback
     return safe_name
+
+
+def _resolve_report_path(filename: str, label: str) -> Path:
+    safe_name = os.path.basename(filename)
+    if safe_name != filename:
+        raise HTTPException(status_code=400, detail=f"Invalid {label} report filename.")
+    report_path = (REPORT_ROOT / safe_name).resolve()
+    if not report_path.is_relative_to(REPORT_ROOT):
+        raise HTTPException(status_code=400, detail=f"Invalid {label} report filename.")
+    return report_path
 
 
 @router.post("/validate")
@@ -103,24 +114,18 @@ async def validate_file(file: UploadFile = File(...)):
 
 @router.get("/download/html/{filename}")
 async def download_html(filename: str):
-    safe_name = os.path.basename(filename)
-    if safe_name != filename:
-        raise HTTPException(status_code=400, detail="Invalid HTML report filename.")
-    file_path = os.path.join(REPORT_DIR, safe_name)
-    if not os.path.exists(file_path):
+    report_path = _resolve_report_path(filename, "HTML")
+    if not report_path.exists():
         raise HTTPException(status_code=404, detail="HTML report not found.")
-    return FileResponse(path=file_path, media_type="text/html", filename=safe_name)
+    return FileResponse(path=report_path, media_type="text/html", filename=report_path.name)
 
 
 @router.get("/download/csv/{filename}")
 async def download_csv(filename: str):
-    safe_name = os.path.basename(filename)
-    if safe_name != filename:
-        raise HTTPException(status_code=400, detail="Invalid CSV report filename.")
-    file_path = os.path.join(REPORT_DIR, safe_name)
-    if not os.path.exists(file_path):
+    report_path = _resolve_report_path(filename, "CSV")
+    if not report_path.exists():
         raise HTTPException(status_code=404, detail="CSV report not found.")
-    return FileResponse(path=file_path, media_type="text/csv", filename=safe_name)
+    return FileResponse(path=report_path, media_type="text/csv", filename=report_path.name)
 
 
 def parse_structured_errors(errors: list):
