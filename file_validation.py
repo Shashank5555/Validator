@@ -38,15 +38,19 @@ FILENAME_SAFE_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
 def _safe_report_path(filename: str) -> Tuple[str, str]:
-    safe_name = os.path.basename(filename)
+    if not filename or "\x00" in filename:
+        raise HTTPException(status_code=400, detail="Invalid report filename.")
+    safe_name = Path(filename).name
     if safe_name != filename or not FILENAME_SAFE_RE.match(safe_name):
         raise HTTPException(status_code=400, detail="Invalid report filename.")
-    file_path = (Path(REPORT_DIR) / safe_name).resolve()
     report_root = Path(REPORT_DIR).resolve()
+    file_path = (report_root / safe_name).resolve()
     try:
         file_path.relative_to(report_root)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report filename.")
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Report not found.")
     return str(file_path), safe_name
 
 
@@ -139,16 +143,12 @@ async def validate_file(file: UploadFile = File(...)):
 @router.get("/download/html/{filename}")
 async def download_html(filename: str):
     file_path, safe_name = _safe_report_path(filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="HTML report not found.")
     return FileResponse(path=file_path, media_type="text/html", filename=safe_name)
 
 
 @router.get("/download/csv/{filename}")
 async def download_csv(filename: str):
     file_path, safe_name = _safe_report_path(filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="CSV report not found.")
     return FileResponse(path=file_path, media_type="text/csv", filename=safe_name)
 
 
