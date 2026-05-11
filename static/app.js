@@ -85,21 +85,27 @@ function formatXml(xml) {
   stripWhitespaceNodes(xmlDoc);
   const serialized = new XMLSerializer().serializeToString(xmlDoc);
   const reg = /(>)(<)(\/*)/g;
-  const formatted = serialized.replace(reg, '$1\n$2$3');
+  const normalized = serialized.replace(/>\s+</g, '><');
+  const formatted = normalized.replace(reg, '$1\n$2$3');
   const lines = formatted.split('\n');
   let indent = 0;
   const pad = '  ';
   return lines
     .map((line) => {
-      if (line.match(/^<\//)) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        return '';
+      }
+      if (trimmed.match(/^<\//)) {
         indent = Math.max(indent - 1, 0);
       }
-      const output = `${pad.repeat(indent)}${line}`;
-      if (line.match(/^<[^!?][^>]*[^/]>/) && !line.match(/<.*>.*<\//)) {
+      const output = `${pad.repeat(indent)}${trimmed}`;
+      if (trimmed.match(/^<[^!?][^>]*[^/]>/) && !trimmed.match(/<.*>.*<\//)) {
         indent += 1;
       }
       return output;
     })
+    .filter((line) => line.length > 0)
     .join('\n');
 }
 
@@ -281,18 +287,6 @@ function downloadXml() {
   URL.revokeObjectURL(url);
 }
 
-function copyXml() {
-  const content = editor.getValue();
-  if (!content.trim()) {
-    setStatus('Nothing to copy.');
-    return;
-  }
-  navigator.clipboard.writeText(content).then(
-    () => setStatus('XML copied to clipboard.', 'success'),
-    () => setStatus('Failed to copy XML.', 'error')
-  );
-}
-
 function clearEditor() {
   editor.setValue('');
   setStatus('Editor cleared.');
@@ -315,7 +309,10 @@ function applyTheme(theme) {
   editor.setOption('theme', theme === 'light' ? 'default' : 'material-darker');
   localStorage.setItem('validator-theme', theme);
   const toggle = document.getElementById('theme-toggle');
-  toggle.textContent = THEME_LABELS[theme] || 'Theme';
+  if (toggle) {
+    toggle.textContent = THEME_LABELS[theme] || 'Theme';
+  }
+  editor.refresh();
 }
 
 function adjustFontSize(delta) {
@@ -357,22 +354,28 @@ fileInput.addEventListener('change', (event) => {
   }
 });
 
-document.getElementById('upload-btn').addEventListener('click', openFilePicker);
-document.getElementById('pretty-btn').addEventListener('click', prettyPrintXml);
-document.getElementById('validate-btn').addEventListener('click', validateXml);
-document.getElementById('undo-btn').addEventListener('click', () => editor.undo());
-document.getElementById('redo-btn').addEventListener('click', () => editor.redo());
-document.getElementById('download-btn').addEventListener('click', downloadXml);
-document.getElementById('copy-btn').addEventListener('click', copyXml);
-document.getElementById('clear-btn').addEventListener('click', clearEditor);
-document.getElementById('font-decrease').addEventListener('click', () => adjustFontSize(-1));
-document.getElementById('font-increase').addEventListener('click', () => adjustFontSize(1));
-document.getElementById('theme-toggle').addEventListener('click', () => {
+function bindClick(id, handler) {
+  const element = document.getElementById(id);
+  if (element) {
+    element.addEventListener('click', handler);
+  }
+}
+
+bindClick('upload-btn', openFilePicker);
+bindClick('pretty-btn', prettyPrintXml);
+bindClick('validate-btn', validateXml);
+bindClick('undo-btn', () => editor.undo());
+bindClick('redo-btn', () => editor.redo());
+bindClick('download-btn', downloadXml);
+bindClick('clear-btn', clearEditor);
+bindClick('font-decrease', () => adjustFontSize(-1));
+bindClick('font-increase', () => adjustFontSize(1));
+bindClick('theme-toggle', () => {
   const currentTheme = document.body.dataset.theme || DEFAULT_THEME;
   applyTheme(currentTheme === 'light' ? 'dark' : 'light');
 });
-document.getElementById('close-modal').addEventListener('click', hideModal);
-document.getElementById('collapse-btn').addEventListener('click', togglePanel);
+bindClick('close-modal', hideModal);
+bindClick('collapse-btn', togglePanel);
 
 summaryModal.addEventListener('click', (event) => {
   if (event.target === summaryModal) {
@@ -385,3 +388,5 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
 });
 
 initializePreferences();
+editor.setValue(INITIAL_EDITOR_VALUE);
+editor.clearHistory();

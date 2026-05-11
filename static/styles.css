@@ -88,8 +88,11 @@ body {
 .brand-subtitle {
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 1.4px;
-  color: var(--muted);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  background: linear-gradient(120deg, var(--accent), var(--accent-alt));
+  -webkit-background-clip: text;
+  color: transparent;
 }
 
 .toolbar-actions {
@@ -357,19 +360,20 @@ body[data-theme="light"] .CodeMirror {
   color: var(--muted);
   border-top: 1px solid var(--border);
   background: var(--panel);
-  min-height: 64px;
+  min-height: 88px;
 }
 
 .status-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: var(--muted);
+  color: var(--accent);
 }
 
 .status-message {
   color: var(--text);
   font-weight: 500;
+  font-size: 14px;
 }
 
 .status-bar.error {

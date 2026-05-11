@@ -71,26 +71,28 @@ def write_annotated_html(xml_path: str, errors: List[str], summary: str, output_
         else:
             highlighted_lines.append(escaped)
 
-    html = """<!doctype html>
-<html lang=\"en\">
+    summary_text = _escape_html(summary)
+    content = "\n".join(highlighted_lines)
+    html = f"""<!doctype html>
+<html lang="en">
 <head>
-  <meta charset=\"utf-8\" />
+  <meta charset="utf-8" />
   <title>Validation Report</title>
   <style>
-    body { background: #0f1115; color: #e6e6e6; font-family: Arial, sans-serif; padding: 24px; }
-    .summary { margin-bottom: 16px; font-size: 14px; color: #9aa4b2; }
-    pre { background: #151922; padding: 16px; border-radius: 8px; overflow-x: auto; }
-    .error-line { background: rgba(255, 99, 71, 0.25); display: block; padding: 2px 4px; border-radius: 4px; }
+    body {{ background: #0f1115; color: #e6e6e6; font-family: Arial, sans-serif; padding: 24px; }}
+    .summary {{ margin-bottom: 16px; font-size: 14px; color: #9aa4b2; }}
+    pre {{ background: #151922; padding: 16px; border-radius: 8px; overflow-x: auto; }}
+    .error-line {{ background: rgba(255, 99, 71, 0.25); display: block; padding: 2px 4px; border-radius: 4px; }}
   </style>
 </head>
 <body>
-  <div class=\"summary\">{summary}</div>
+  <div class="summary">{summary_text}</div>
   <pre>{content}</pre>
 </body>
 </html>"""
 
     with open(output_path, "w", encoding="utf-8") as handle:
-        handle.write(html.format(summary=_escape_html(summary), content="\n".join(highlighted_lines)))
+        handle.write(html)
 
     return output_path
 
