@@ -6,11 +6,12 @@ import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from defusedxml import ElementTree as DefusedET
 
 DEFAULT_VERSION = os.getenv("PAIN001_DEFAULT_VERSION", "pain.001.001.03")
+REPORT_OUTPUT_DIR = os.path.abspath("files/pain_001_output_reports")
 
 
 @dataclass
@@ -95,10 +96,9 @@ def write_individual_report(
     errors: List[str],
     diffs: List[str],
 ) -> str:
-    output_dir = "files/pain_001_output_reports"
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(REPORT_OUTPUT_DIR, exist_ok=True)
     report_name = f"validation_{uuid.uuid4().hex}.csv"
-    report_path = os.path.join(output_dir, report_name)
+    report_path = os.path.join(REPORT_OUTPUT_DIR, report_name)
 
     with open(report_path, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
@@ -184,10 +184,10 @@ def _safe_parse(xml_text: str):
         return DefusedET.ElementTree(DefusedET.fromstring(xml_text)), None
     except DefusedET.ParseError as exc:
         line, _column = getattr(exc, "position", (1, 0))
-        return None, f"Line {line} - {exc}"
+        return None, f"Line {line} - Invalid XML content."
 
 
-def _extract_error_lines(errors: List[str]) -> set[int]:
+def _extract_error_lines(errors: List[str]) -> Set[int]:
     line_numbers = set()
     for err in errors:
         match = re.search(r"Line (\d+)", err)

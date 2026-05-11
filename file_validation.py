@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from sftp import SFTPClient, SFTPConfig
 from pathlib import Path
+import logging
 import re
 
 router = APIRouter(prefix="/files", tags=["Files"])
@@ -24,8 +25,19 @@ router = APIRouter(prefix="/files", tags=["Files"])
 app = FastAPI(title="SFTP Pain.001 Validator")
 # NOTE: app.include_router(router) is moved to the bottom AFTER route definitions.
 
+logger = logging.getLogger(__name__)
+
 UPLOAD_DIR = "temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+REPORT_DIR = os.path.abspath("files/pain_001_output_reports")
+
+
+def _safe_report_path(filename: str) -> tuple[str, str]:
+    safe_name = os.path.basename(filename)
+    file_path = os.path.abspath(os.path.join(REPORT_DIR, safe_name))
+    if not file_path.startswith(REPORT_DIR + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid report filename.")
+    return file_path, safe_name
 
 
 @router.post("/validate")
@@ -64,7 +76,7 @@ async def validate_file(file: UploadFile = File(...)):
             xml_path,
             errors,
             "See console summary",
-            output_dir="files/pain_001_output_reports",
+            output_dir=REPORT_DIR,
         )
         csv_report_path = write_individual_report(
             os.path.basename(file.filename),
@@ -101,13 +113,13 @@ async def validate_file(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception:
+        logger.exception("Validation failed.")
         raise HTTPException(status_code=500, detail="Validation failed.")
 
 
 @router.get("/download/html/{filename}")
 async def download_html(filename: str):
-    safe_name = os.path.basename(filename)
-    file_path = os.path.join("files/pain_001_output_reports", safe_name)
+    file_path, safe_name = _safe_report_path(filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="HTML report not found.")
     return FileResponse(path=file_path, media_type="text/html", filename=safe_name)
@@ -115,8 +127,7 @@ async def download_html(filename: str):
 
 @router.get("/download/csv/{filename}")
 async def download_csv(filename: str):
-    safe_name = os.path.basename(filename)
-    file_path = os.path.join("files/pain_001_output_reports", safe_name)
+    file_path, safe_name = _safe_report_path(filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="CSV report not found.")
     return FileResponse(path=file_path, media_type="text/csv", filename=safe_name)

@@ -29,6 +29,8 @@ const modalStatus = document.getElementById('modal-status');
 const modalHtmlReport = document.getElementById('modal-html-report');
 const modalCsvReport = document.getElementById('modal-csv-report');
 
+const HIGHLIGHT_DURATION_MS = 2000;
+
 let currentHighlight = null;
 
 function setStatus(message, variant = '') {
@@ -178,7 +180,7 @@ function focusLine(lineNumber) {
       editor.removeLineClass(currentHighlight, 'background', 'line-highlight');
       currentHighlight = null;
     }
-  }, 2000);
+  }, HIGHLIGHT_DURATION_MS);
 }
 
 function renderSummary(data, targetList, targetStatus) {
