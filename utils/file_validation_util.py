@@ -6,7 +6,7 @@ import re
 import uuid
 from pathlib import Path
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from defusedxml import ElementTree as DefusedET
@@ -44,7 +44,7 @@ def validate_and_compare(xml_path: str, version: str) -> Tuple[bool, List[str], 
     checks = _build_checks(root, xml_text)
     extra_info.update(checks)
     errors.extend(_duplicate_errors(xml_text))
-    errors.extend(_build_check_errors(checks, errors))
+    errors.extend(_build_check_errors(xml_text, checks, errors))
 
     passed = len(errors) == 0 and _checks_all_passed(checks)
     return passed, errors, diffs, extra_info
@@ -249,7 +249,7 @@ def _build_checks(root, xml_text: str) -> Dict[str, object]:
     checks["ctrlsum_passed"] = _has_numeric(root, "CtrlSum")
     checks["purpose_code_passed"] = _has_text(root, "Purp")
     checks["utf8_encoding_passed"] = _is_utf8(xml_text)
-    checks["currency_code_passed"] = _has_text(root, "Ccy")
+    checks["currency_code_passed"] = _currency_code_valid(root)
     checks["iban_passed"] = _iban_present(root)
     checks["mmbid_passed"] = _has_text(root, "MmbId")
     checks["country_code_passed"] = _country_code_present(root)
@@ -276,37 +276,92 @@ def _checks_all_passed(checks: Dict[str, object]) -> bool:
     return all(results) if results else True
 
 
-def _build_check_errors(checks: Dict[str, object], existing_errors: List[str]) -> List[str]:
-    label_map = {
-        "nboftxs_passed": "NbOfTxs",
-        "ctrlsum_passed": "CtrlSum",
-        "purpose_code_passed": "Purpose Code",
-        "utf8_encoding_passed": "UTF-8 Encoding",
-        "currency_code_passed": "Currency Code",
-        "duplicate_msgid_passed": "Duplicate Message ID",
-        "iban_passed": "IBAN checksum",
-        "mmbid_passed": "MmbId",
-        "country_code_passed": "Country Code",
-        "duplicate_e2e_passed": "Duplicate EndToEndId",
-        "payment_date_results": "Payment Dates",
-    }
+def _build_check_errors(xml_text: str, checks: Dict[str, object], existing_errors: List[str]) -> List[str]:
     errors: List[str] = []
 
     def has_label(label: str) -> bool:
-        return any(label in err for err in existing_errors)
+        return any(label in err for err in existing_errors) or any(label in err for err in errors)
 
-    for key, label in label_map.items():
-        value = checks.get(key)
-        if isinstance(value, bool):
-            if value is False and not has_label(label):
-                errors.append(f"Check failed: {label}.")
-            continue
-        if isinstance(value, dict):
-            passed_value = value.get("passed")
-            if passed_value is False and not has_label(label):
-                details = value.get("details")
-                detail_suffix = f" Details: {details}" if isinstance(details, str) and details else ""
-                errors.append(f"Check failed: {label}.{detail_suffix}")
+    def add_error(line_no: Optional[int], message: str, found: Optional[str] = None) -> None:
+        if line_no is None:
+            line_no = 1
+        if found is not None:
+            message = f"{message} Found: {found}"
+        errors.append(f"Line {line_no} - {message}")
+
+    def tag_line(tag: str) -> Tuple[Optional[int], Optional[str]]:
+        return _find_first_tag_line(xml_text, tag)
+
+    if checks.get("nboftxs_passed") is False and not has_label("NbOfTxs"):
+        line_no, value = tag_line("NbOfTxs")
+        if value:
+            add_error(line_no, "Invalid NbOfTxs value.", value)
+        else:
+            add_error(line_no, "Missing NbOfTxs.")
+
+    if checks.get("ctrlsum_passed") is False and not has_label("CtrlSum"):
+        line_no, value = tag_line("CtrlSum")
+        if value:
+            add_error(line_no, "Invalid CtrlSum value.", value)
+        else:
+            add_error(line_no, "Missing CtrlSum.")
+
+    if checks.get("purpose_code_passed") is False and not has_label("Purpose Code"):
+        line_no, value = tag_line("Purp")
+        if value:
+            add_error(line_no, "Invalid Purpose Code.", value)
+        else:
+            add_error(line_no, "Missing Purpose Code.")
+
+    if checks.get("utf8_encoding_passed") is False and not has_label("UTF-8"):
+        add_error(1, "Invalid UTF-8 encoding.")
+
+    if checks.get("currency_code_passed") is False and not has_label("Currency Code"):
+        line_no, value = tag_line("Ccy")
+        if value:
+            add_error(line_no, "Invalid Currency Code.", value)
+        else:
+            add_error(line_no, "Missing Currency Code.")
+
+    if checks.get("iban_passed") is False and not has_label("IBAN"):
+        line_no, value = tag_line("IBAN")
+        if value:
+            add_error(line_no, "Invalid IBAN length.", value)
+        else:
+            add_error(line_no, "Missing IBAN.")
+
+    if checks.get("mmbid_passed") is False and not has_label("MmbId"):
+        line_no, value = tag_line("MmbId")
+        if value:
+            add_error(line_no, "Invalid MmbId.", value)
+        else:
+            add_error(line_no, "Missing MmbId.")
+
+    if checks.get("country_code_passed") is False and not has_label("Country Code"):
+        line_no, value = tag_line("Ctry")
+        if value:
+            add_error(line_no, "Invalid Country Code.", value)
+        else:
+            add_error(line_no, "Missing Country Code.")
+
+    payment_results = checks.get("payment_date_results", {})
+    if isinstance(payment_results, dict) and payment_results.get("passed") is False and not has_label("payment"):
+        line_no, value = tag_line("ReqdExctnDt")
+        if line_no is None:
+            line_no, value = tag_line("ReqdColltnDt")
+        if not value:
+            add_error(line_no, "Missing required payment date.")
+        else:
+            parsed = _parse_iso_date(value)
+            if parsed is None:
+                add_error(line_no, "Invalid payment date format.", value)
+            else:
+                if parsed < datetime.now().date():
+                    add_error(
+                        line_no,
+                        "ACH payment must have execution date today or in the future.",
+                        value,
+                    )
 
     return errors
 
@@ -342,13 +397,47 @@ def _country_code_present(root) -> bool:
     return len(value) == 2 and value.isalpha()
 
 
+def _currency_code_valid(root) -> bool:
+    element = root.find(".//{*}Ccy")
+    if element is None or not element.text:
+        return False
+    value = element.text.strip()
+    return _is_valid_currency_code(value)
+
+
+def _is_valid_currency_code(value: str) -> bool:
+    if not re.fullmatch(r"[A-Z]{3}", value):
+        return False
+    return value != "XXX"
+
+
+def _parse_iso_date(value: str) -> Optional[date]:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _find_first_tag_line(xml_text: str, tag: str) -> Tuple[Optional[int], Optional[str]]:
+    pattern = re.compile(rf"<(?:(?:\w+):)?{tag}[^>]*>(.*?)</(?:(?:\w+):)?{tag}>")
+    for line_no, line in enumerate(xml_text.splitlines(), start=1):
+        match = pattern.search(line)
+        if match:
+            return line_no, match.group(1).strip()
+    return None, None
+
+
 def _payment_date_results(root) -> Dict[str, object]:
     element = root.find(".//{*}ReqdExctnDt") or root.find(".//{*}ReqdColltnDt")
     if element is None or not element.text:
         return {"passed": False, "details": "Missing required payment date."}
     value = element.text.strip()
-    is_valid = bool(re.match(r"\d{4}-\d{2}-\d{2}", value))
-    return {"passed": is_valid, "details": value}
+    parsed = _parse_iso_date(value)
+    if parsed is None:
+        return {"passed": False, "details": f"Invalid date format: {value}"}
+    if parsed < datetime.now().date():
+        return {"passed": False, "details": value}
+    return {"passed": True, "details": value}
 
 
 def _is_utf8(xml_text: str) -> bool:
