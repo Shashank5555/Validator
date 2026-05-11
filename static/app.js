@@ -3,6 +3,7 @@ const DEFAULT_THEME = 'dark';
 const DEFAULT_FONT_SIZE = 13;
 const MIN_FONT_SIZE = 11;
 const MAX_FONT_SIZE = 20;
+const MAX_FORMAT_ITERATIONS = 2;
 
 const editor = CodeMirror(document.getElementById('editor'), {
   mode: 'application/xml',
@@ -68,7 +69,7 @@ function prettyPrintXml() {
       return;
     }
     let formatted = formatXml(xmlValue);
-    for (let i = 0; i < 2; i += 1) {
+    for (let i = 0; i < MAX_FORMAT_ITERATIONS; i += 1) {
       const next = formatXml(formatted);
       if (next === formatted) {
         break;
@@ -395,5 +396,7 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
 });
 
 initializePreferences();
-editor.setValue(INITIAL_EDITOR_VALUE);
+if (editor.getValue() !== INITIAL_EDITOR_VALUE) {
+  editor.setValue(INITIAL_EDITOR_VALUE);
+}
 editor.clearHistory();
