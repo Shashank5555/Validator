@@ -10,13 +10,10 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 
-from sftp import SFTPClient, SFTPConfig
 from utils.file_validation_util import (
     get_version_from_filename,
     get_version_from_xml,
@@ -28,7 +25,7 @@ from utils.file_validation_util import (
 
 router = APIRouter(prefix="/files", tags=["Files"])
 
-app = FastAPI(title="SFTP Pain.001 Validator")
+app = FastAPI(title="Validator")
 # NOTE: app.include_router(router) is moved to the bottom AFTER route definitions.
 
 logger = logging.getLogger(__name__)
@@ -166,63 +163,6 @@ def parse_structured_errors(errors: list):
         else:
             additional_error_details.append(err.strip())
     return {"line_errors": line_errors, "additional_error_details": additional_error_details}
-
-
-class SFTPFilenameRequest(BaseModel):
-    filename: str  # e.g., "wirefile.xml" or "/upload/wirefile.xml"
-
-
-@router.post("/validate-by-name")
-async def validate_from_sftp(req: SFTPFilenameRequest):
-    """
-    Fetch a file by name from SFTP (using .env / env config),
-    run your existing validation (same logic as /files/validate),
-    and return the JSON result.
-    """
-    # Load .env once here (harmless if already loaded)
-    load_dotenv()
-
-    host = os.getenv("SFTP_HOST")
-    port = int(os.getenv("SFTP_PORT", "22"))
-    user = os.getenv("SFTP_USER")
-    pwd = os.getenv("SFTP_PASS")
-    rdir = os.getenv("SFTP_DIR", "/upload")
-    known = os.getenv("SFTP_KNOWN_HOSTS")  # optional
-
-    # Basic sanity
-    missing = [k for k, v in {"SFTP_HOST": host, "SFTP_USER": user, "SFTP_PASS": pwd}.items() if not v]
-    if missing:
-        raise HTTPException(status_code=500, detail=f"Missing SFTP config: {', '.join(missing)}")
-
-    cfg = SFTPConfig(
-        host=host,
-        port=port,
-        username=user,
-        password=pwd,
-        remote_dir=rdir,
-        known_hosts=known,
-    )
-
-    # Connect → ensure file exists → fetch bytes
-    try:
-        with SFTPClient(cfg) as cli:
-            remote_path = cli.ensure_exists(req.filename)
-            # if client passed only a filename (not absolute), ensure_exists uses remote_dir
-            data = cli.fetch_bytes(remote_path)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"File not found on SFTP: {req.filename}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"SFTP error: {type(e).__name__}: {e}")
-
-    # Call your FastAPI route logic via the in-file adapter
-    # (this uses your existing validate_file(file: UploadFile) flow)
-    try:
-        result = await validate_via_route_async(data, filename=req.filename)
-        # validate_via_route returns whatever your /files/validate returns
-        return result
-    finally:
-        # optional: any cleanup you want
-        pass
 
 
 # Include router AFTER all routes have been added

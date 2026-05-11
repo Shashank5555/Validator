@@ -1,9 +1,8 @@
-const DEFAULT_XML_TEMPLATE = `<Document>
-  <CstmrCdtTrfInitn>
-    <NbOfTxs>1</NbOfTxs>
-    <CtrlSum>0.00</CtrlSum>
-  </CstmrCdtTrfInitn>
-</Document>`;
+const DEFAULT_XML_TEMPLATE = '';
+const DEFAULT_THEME = 'dark';
+const DEFAULT_FONT_SIZE = 13;
+const MIN_FONT_SIZE = 11;
+const MAX_FONT_SIZE = 20;
 
 const editor = CodeMirror(document.getElementById('editor'), {
   mode: 'application/xml',
@@ -15,6 +14,7 @@ const editor = CodeMirror(document.getElementById('editor'), {
 
 const fileInput = document.getElementById('file-input');
 const statusBar = document.getElementById('status-bar');
+const statusMessage = document.querySelector('.status-message');
 const sidePanel = document.getElementById('side-panel');
 const errorList = document.getElementById('error-list');
 const additionalErrors = document.getElementById('additional-errors');
@@ -30,12 +30,19 @@ const modalHtmlReport = document.getElementById('modal-html-report');
 const modalCsvReport = document.getElementById('modal-csv-report');
 
 const HIGHLIGHT_DURATION_MS = 2000;
+const THEME_LABELS = {
+  dark: 'Light Mode',
+  light: 'Dark Mode'
+};
 
 let currentHighlight = null;
 
 function setStatus(message, variant = '') {
-  statusBar.textContent = message;
-  statusBar.dataset.variant = variant;
+  statusMessage.textContent = message;
+  statusBar.classList.remove('error', 'success');
+  if (variant) {
+    statusBar.classList.add(variant);
+  }
 }
 
 function openFilePicker() {
@@ -54,11 +61,16 @@ function loadFile(file) {
 
 function prettyPrintXml() {
   try {
-    const formatted = formatXml(editor.getValue());
+    const xmlValue = editor.getValue();
+    if (!xmlValue.trim()) {
+      setStatus('Nothing to format.');
+      return;
+    }
+    const formatted = formatXml(xmlValue);
     editor.setValue(formatted);
     setStatus('XML formatted.');
   } catch (error) {
-    setStatus('Pretty print failed: Invalid XML.');
+    setStatus('Pretty print failed: Invalid XML.', 'error');
     alert('Unable to format XML. Please ensure the XML is valid.');
   }
 }
@@ -70,6 +82,7 @@ function formatXml(xml) {
     throw new Error('Invalid XML');
   }
 
+  stripWhitespaceNodes(xmlDoc);
   const serialized = new XMLSerializer().serializeToString(xmlDoc);
   const reg = /(>)(<)(\/*)/g;
   const formatted = serialized.replace(reg, '$1\n$2$3');
@@ -91,7 +104,7 @@ function formatXml(xml) {
 }
 
 async function validateXml() {
-  setStatus('Validating...');
+  setStatus('Validating...', '');
   const xmlContent = editor.getValue();
   const formData = new FormData();
   const file = new File([xmlContent], 'editor.xml', { type: 'text/xml' });
@@ -110,7 +123,7 @@ async function validateXml() {
 
     handleValidationResult(data);
   } catch (error) {
-    setStatus(`Validation error: ${error.message}`);
+    setStatus(`Validation error: ${error.message}`, 'error');
   }
 }
 
@@ -118,7 +131,7 @@ function handleValidationResult(data) {
   const status = data.status || 'FAILED';
   const isPassed = status === 'PASSED';
 
-  setStatus(`Validation ${status.toLowerCase()}.`);
+  setStatus(`Validation ${status.toLowerCase()}.`, isPassed ? 'success' : 'error');
   updateReportLinks(data);
   renderSummary(data, summaryList, summaryStatus);
   renderSummary(data, modalSummaryList, modalStatus);
@@ -268,6 +281,59 @@ function downloadXml() {
   URL.revokeObjectURL(url);
 }
 
+function copyXml() {
+  const content = editor.getValue();
+  if (!content.trim()) {
+    setStatus('Nothing to copy.');
+    return;
+  }
+  navigator.clipboard.writeText(content).then(
+    () => setStatus('XML copied to clipboard.', 'success'),
+    () => setStatus('Failed to copy XML.', 'error')
+  );
+}
+
+function clearEditor() {
+  editor.setValue('');
+  setStatus('Editor cleared.');
+}
+
+function stripWhitespaceNodes(node) {
+  const whitespaceNodes = [];
+  node.childNodes.forEach((child) => {
+    if (child.nodeType === Node.TEXT_NODE && !child.nodeValue.trim()) {
+      whitespaceNodes.push(child);
+    } else if (child.nodeType === Node.ELEMENT_NODE) {
+      stripWhitespaceNodes(child);
+    }
+  });
+  whitespaceNodes.forEach((child) => child.parentNode.removeChild(child));
+}
+
+function applyTheme(theme) {
+  document.body.dataset.theme = theme;
+  editor.setOption('theme', theme === 'light' ? 'default' : 'material-darker');
+  localStorage.setItem('validator-theme', theme);
+  const toggle = document.getElementById('theme-toggle');
+  toggle.textContent = THEME_LABELS[theme] || 'Theme';
+}
+
+function adjustFontSize(delta) {
+  const current = Number.parseInt(getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size'), 10);
+  const next = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, current + delta));
+  document.documentElement.style.setProperty('--editor-font-size', `${next}px`);
+  localStorage.setItem('validator-font-size', `${next}`);
+  editor.refresh();
+}
+
+function initializePreferences() {
+  const storedTheme = localStorage.getItem('validator-theme') || DEFAULT_THEME;
+  applyTheme(storedTheme);
+  const storedFont = Number.parseInt(localStorage.getItem('validator-font-size'), 10);
+  const fontSize = Number.isNaN(storedFont) ? DEFAULT_FONT_SIZE : storedFont;
+  document.documentElement.style.setProperty('--editor-font-size', `${fontSize}px`);
+}
+
 function switchTab(tabName) {
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === tabName);
@@ -296,6 +362,14 @@ document.getElementById('validate-btn').addEventListener('click', validateXml);
 document.getElementById('undo-btn').addEventListener('click', () => editor.undo());
 document.getElementById('redo-btn').addEventListener('click', () => editor.redo());
 document.getElementById('download-btn').addEventListener('click', downloadXml);
+document.getElementById('copy-btn').addEventListener('click', copyXml);
+document.getElementById('clear-btn').addEventListener('click', clearEditor);
+document.getElementById('font-decrease').addEventListener('click', () => adjustFontSize(-1));
+document.getElementById('font-increase').addEventListener('click', () => adjustFontSize(1));
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const currentTheme = document.body.dataset.theme || DEFAULT_THEME;
+  applyTheme(currentTheme === 'light' ? 'dark' : 'light');
+});
 document.getElementById('close-modal').addEventListener('click', hideModal);
 document.getElementById('collapse-btn').addEventListener('click', togglePanel);
 
@@ -308,3 +382,5 @@ summaryModal.addEventListener('click', (event) => {
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
+
+initializePreferences();

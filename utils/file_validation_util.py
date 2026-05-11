@@ -33,13 +33,12 @@ def validate_and_compare(xml_path: str, version: str) -> Tuple[bool, List[str], 
         extra_info.update(_default_checks(False))
         return False, errors, diffs, extra_info
 
-    tree, parse_error = _safe_parse(xml_text)
+    root, parse_error = _safe_parse(xml_text)
     if parse_error:
         errors.append(parse_error)
         extra_info.update(_default_checks(False))
         return False, errors, diffs, extra_info
 
-    root = tree.getroot()
     extra_info.update(_build_checks(root, xml_text))
     errors.extend(_duplicate_errors(xml_text))
 
@@ -128,10 +127,9 @@ def get_version_from_xml(xml_path: str) -> Optional[str]:
     xml_text = _read_file(xml_path)
     if not xml_text:
         return None
-    tree, parse_error = _safe_parse(xml_text)
+    root, parse_error = _safe_parse(xml_text)
     if parse_error:
         return None
-    root = tree.getroot()
     match = re.search(r"pain\.001\.[\d.]+", root.tag)
     return match.group(0) if match else None
 
@@ -181,7 +179,7 @@ def _read_file(path: str) -> Optional[str]:
 
 def _safe_parse(xml_text: str):
     try:
-        return DefusedET.ElementTree(DefusedET.fromstring(xml_text)), None
+        return DefusedET.fromstring(xml_text), None
     except DefusedET.ParseError as exc:
         line, _column = getattr(exc, "position", (1, 0))
         return None, f"Line {line} - Invalid XML content."

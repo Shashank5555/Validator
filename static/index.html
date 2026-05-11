@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pain.001 Validator</title>
+  <title>Validator</title>
+  <link rel="icon" type="image/png" href="https://github.com/user-attachments/assets/f73614f2-4b92-4e23-a694-77cc2fb33d60" />
   <link rel="stylesheet" href="/static/vendor/codemirror/codemirror.css" />
   <link rel="stylesheet" href="/static/vendor/codemirror/material-darker.css" />
   <link rel="stylesheet" href="/static/styles.css" />
@@ -12,7 +13,11 @@
   <div class="app">
     <header class="toolbar">
       <div class="toolbar-left">
-        <span class="app-title">Pain.001 Validator</span>
+        <img class="brand-logo" src="https://github.com/user-attachments/assets/f73614f2-4b92-4e23-a694-77cc2fb33d60" alt="LVT LABS logo" />
+        <div class="brand-text">
+          <span class="app-title">Validator</span>
+          <span class="brand-subtitle">LVT LABS</span>
+        </div>
       </div>
       <div class="toolbar-actions">
         <button id="upload-btn" class="btn">Upload XML</button>
@@ -21,6 +26,11 @@
         <button id="undo-btn" class="btn">Undo</button>
         <button id="redo-btn" class="btn">Redo</button>
         <button id="download-btn" class="btn">Download XML</button>
+        <button id="copy-btn" class="btn">Copy XML</button>
+        <button id="clear-btn" class="btn">Clear</button>
+        <button id="font-decrease" class="btn">A-</button>
+        <button id="font-increase" class="btn">A+</button>
+        <button id="theme-toggle" class="btn">Light Mode</button>
       </div>
     </header>
 
@@ -62,7 +72,10 @@
       </aside>
     </main>
 
-    <footer class="status-bar" id="status-bar">Ready.</footer>
+    <footer class="status-bar" id="status-bar">
+      <div class="status-label">Output</div>
+      <div class="status-message">Ready.</div>
+    </footer>
   </div>
 
   <div id="summary-modal" class="modal hidden" role="dialog" aria-modal="true">
