@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from defusedxml import ElementTree as DefusedET
 from xml.etree.ElementTree import ParseError
@@ -185,7 +185,7 @@ def _read_file(path: str) -> Optional[str]:
         return None
 
 
-def _safe_parse(xml_text: str):
+def _safe_parse(xml_text: str) -> Tuple[Optional[Any], Optional[str]]:
     """Parse XML content safely using defusedxml and return (root, error_message)."""
     try:
         return DefusedET.fromstring(xml_text), None

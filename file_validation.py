@@ -8,7 +8,7 @@ import shutil
 import uuid
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -37,7 +37,7 @@ os.makedirs(REPORT_DIR, exist_ok=True)
 FILENAME_SAFE_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
-def _safe_report_path(filename: str) -> tuple[str, str]:
+def _safe_report_path(filename: str) -> Tuple[str, str]:
     safe_name = os.path.basename(filename)
     if safe_name != filename or not FILENAME_SAFE_RE.match(safe_name):
         raise HTTPException(status_code=400, detail="Invalid report filename.")
@@ -52,8 +52,10 @@ def _safe_report_path(filename: str) -> tuple[str, str]:
 
 def _sanitize_upload_name(filename: str, fallback: str) -> str:
     safe_name = os.path.basename(filename or "").strip() or fallback
-    safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", safe_name)
-    return safe_name or fallback
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", safe_name).lstrip(".")
+    if not safe_name or not re.search(r"[A-Za-z0-9]", safe_name):
+        return fallback
+    return safe_name
 
 
 @router.post("/validate")

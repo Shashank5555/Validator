@@ -1,4 +1,4 @@
-const DEFAULT_XML_TEMPLATE = '';
+const INITIAL_EDITOR_VALUE = '';
 const DEFAULT_THEME = 'dark';
 const DEFAULT_FONT_SIZE = 13;
 const MIN_FONT_SIZE = 11;
@@ -9,7 +9,7 @@ const editor = CodeMirror(document.getElementById('editor'), {
   theme: 'material-darker',
   lineNumbers: true,
   lineWrapping: false,
-  value: DEFAULT_XML_TEMPLATE
+  value: INITIAL_EDITOR_VALUE
 });
 
 const fileInput = document.getElementById('file-input');
@@ -72,7 +72,6 @@ function prettyPrintXml() {
     setStatus('XML formatted.');
   } catch (error) {
     setStatus('Pretty print failed: Invalid XML.', 'error');
-    alert('Unable to format XML. Please ensure the XML is valid.');
   }
 }
 
