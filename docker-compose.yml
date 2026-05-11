@@ -1,0 +1,7 @@
+services:
+  validator:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - PAIN001_DEFAULT_VERSION=pain.001.001.03

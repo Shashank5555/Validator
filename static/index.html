@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pain.001 Validator</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div class="toolbar-left">
+        <span class="app-title">Pain.001 Validator</span>
+      </div>
+      <div class="toolbar-actions">
+        <button id="upload-btn" class="btn">Upload XML</button>
+        <button id="validate-btn" class="btn primary">Validate</button>
+        <button id="pretty-btn" class="btn">Pretty Print</button>
+        <button id="undo-btn" class="btn">Undo</button>
+        <button id="redo-btn" class="btn">Redo</button>
+        <button id="download-btn" class="btn">Download XML</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="editor-pane">
+        <div id="editor" class="editor"></div>
+      </section>
+
+      <aside id="side-panel" class="side-panel hidden">
+        <div class="side-header">
+          <div>
+            <div class="side-title">Validation Results</div>
+            <div id="side-subtitle" class="side-subtitle">No validation yet.</div>
+          </div>
+          <button id="collapse-btn" class="icon-btn" aria-label="Collapse panel">
+            <span id="collapse-icon">⟨</span>
+          </button>
+        </div>
+
+        <div class="side-tabs">
+          <button class="tab-btn active" data-tab="errors">Errors</button>
+          <button class="tab-btn" data-tab="summary">Summary</button>
+        </div>
+
+        <div class="side-body">
+          <div id="errors-panel" class="tab-panel active">
+            <ul id="error-list" class="error-list"></ul>
+            <div id="additional-errors" class="additional-errors"></div>
+            <div class="report-links">
+              <a id="html-report" href="#" target="_blank" rel="noopener">Open HTML Report</a>
+              <a id="csv-report" href="#" target="_blank" rel="noopener">Download CSV</a>
+            </div>
+          </div>
+          <div id="summary-panel" class="tab-panel">
+            <div id="summary-status" class="summary-status"></div>
+            <ul id="summary-list" class="summary-list"></ul>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="status-bar" id="status-bar">Ready.</footer>
+  </div>
+
+  <div id="summary-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Validation Summary</h2>
+        <button id="close-modal" class="icon-btn" aria-label="Close summary">✕</button>
+      </div>
+      <div id="modal-status" class="summary-status"></div>
+      <ul id="modal-summary-list" class="summary-list"></ul>
+      <div class="report-links">
+        <a id="modal-html-report" href="#" target="_blank" rel="noopener">Open HTML Report</a>
+        <a id="modal-csv-report" href="#" target="_blank" rel="noopener">Download CSV</a>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept=".xml" hidden />
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
