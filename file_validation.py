@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from utils.file_validation_util import (
@@ -35,24 +35,29 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 REPORT_DIR = os.path.abspath("files/pain_001_output_reports")
 os.makedirs(REPORT_DIR, exist_ok=True)
 FILENAME_SAFE_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
-REPORT_REGISTRY: Dict[str, Dict[str, str]] = {"html": {}, "csv": {}}
+REPORT_REGISTRY: Dict[str, Dict[str, Dict[str, object]]] = {"html": {}, "csv": {}}
 
 
-def _register_report(report_type: str, file_path: str) -> str:
+def _register_report(report_type: str, file_path: str, media_type: str) -> str:
     safe_name = os.path.basename(file_path)
-    REPORT_REGISTRY.setdefault(report_type, {})[safe_name] = file_path
+    with open(file_path, "rb") as handle:
+        content = handle.read()
+    REPORT_REGISTRY.setdefault(report_type, {})[safe_name] = {
+        "content": content,
+        "media_type": media_type,
+    }
     return safe_name
 
 
-def _safe_report_path(report_type: str, filename: str) -> Tuple[str, str]:
+def _safe_report_entry(report_type: str, filename: str) -> Tuple[Dict[str, object], str]:
     if not filename or "\x00" in filename:
         raise HTTPException(status_code=400, detail="Invalid report filename.")
     safe_name = Path(filename).name
     if safe_name != filename or not FILENAME_SAFE_RE.match(safe_name):
         raise HTTPException(status_code=400, detail="Invalid report filename.")
-    file_path = REPORT_REGISTRY.get(report_type, {}).get(safe_name)
-    if file_path:
-        return file_path, safe_name
+    entry = REPORT_REGISTRY.get(report_type, {}).get(safe_name)
+    if entry:
+        return entry, safe_name
     raise HTTPException(status_code=404, detail="Report not found.")
 
 
@@ -111,8 +116,8 @@ async def validate_file(file: UploadFile = File(...)):
             errors,
             diffs,
         )
-        html_name = _register_report("html", html_path)
-        csv_name = _register_report("csv", csv_report_path)
+        html_name = _register_report("html", html_path, "text/html")
+        csv_name = _register_report("csv", csv_report_path, "text/csv")
 
         # Build response
         return {
@@ -146,14 +151,16 @@ async def validate_file(file: UploadFile = File(...)):
 
 @router.get("/download/html/{filename}")
 async def download_html(filename: str):
-    file_path, safe_name = _safe_report_path("html", filename)
-    return FileResponse(path=file_path, media_type="text/html", filename=safe_name)
+    entry, safe_name = _safe_report_entry("html", filename)
+    headers = {"Content-Disposition": f'inline; filename="{safe_name}"'}
+    return Response(content=entry["content"], media_type=entry["media_type"], headers=headers)
 
 
 @router.get("/download/csv/{filename}")
 async def download_csv(filename: str):
-    file_path, safe_name = _safe_report_path("csv", filename)
-    return FileResponse(path=file_path, media_type="text/csv", filename=safe_name)
+    entry, safe_name = _safe_report_entry("csv", filename)
+    headers = {"Content-Disposition": f'attachment; filename="{safe_name}"'}
+    return Response(content=entry["content"], media_type=entry["media_type"], headers=headers)
 
 
 def parse_structured_errors(errors: list):
