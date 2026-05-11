@@ -319,7 +319,8 @@ function applyTheme(theme) {
 }
 
 function adjustFontSize(delta) {
-  const current = Number.parseInt(getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size'), 10);
+  const currentValue = getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size').trim();
+  const current = Number.parseFloat(currentValue.replace('px', ''));
   const next = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, current + delta));
   document.documentElement.style.setProperty('--editor-font-size', `${next}px`);
   localStorage.setItem('validator-font-size', `${next}`);

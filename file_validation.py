@@ -33,10 +33,13 @@ logger = logging.getLogger(__name__)
 UPLOAD_DIR = "temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 REPORT_DIR = os.path.abspath("files/pain_001_output_reports")
+FILENAME_SAFE_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
 def _safe_report_path(filename: str) -> tuple[str, str]:
     safe_name = os.path.basename(filename)
+    if safe_name != filename or not FILENAME_SAFE_RE.match(safe_name):
+        raise HTTPException(status_code=400, detail="Invalid report filename.")
     file_path = (Path(REPORT_DIR) / safe_name).resolve()
     report_root = Path(REPORT_DIR).resolve()
     try:
@@ -46,21 +49,28 @@ def _safe_report_path(filename: str) -> tuple[str, str]:
     return str(file_path), safe_name
 
 
+def _sanitize_upload_name(filename: str, fallback: str) -> str:
+    safe_name = os.path.basename(filename or "").strip() or fallback
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", safe_name)
+    return safe_name or fallback
+
+
 @router.post("/validate")
 async def validate_file(file: UploadFile = File(...)):
     try:
         unique_id = uuid.uuid4().hex
-        ext = os.path.splitext(file.filename)[1].lower()
+        safe_filename = _sanitize_upload_name(file.filename, "upload.xml")
+        ext = os.path.splitext(safe_filename)[1].lower()
         if ext not in [".xml", ".csv"]:
             raise HTTPException(status_code=400, detail="Only XML or CSV files are supported.")
 
-        file_path = os.path.join(UPLOAD_DIR, f"{unique_id}_{file.filename}")
+        file_path = os.path.join(UPLOAD_DIR, f"{unique_id}_{safe_filename}")
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
         # Get version
         if ext == ".csv":
-            version = get_version_from_filename(file.filename) or prompt_for_version(file.filename)
+            version = get_version_from_filename(safe_filename) or prompt_for_version(file.filename)
             if not version:
                 return JSONResponse(status_code=400, content={"error": "Could not determine version from filename."})
             from utils.file_validation_util import generate_xml_from_csv
@@ -85,7 +95,7 @@ async def validate_file(file: UploadFile = File(...)):
             output_dir=REPORT_DIR,
         )
         csv_report_path = write_individual_report(
-            os.path.basename(file.filename),
+            safe_filename,
             version,
             "CSV" if ext == ".csv" else "XML",
             passed,

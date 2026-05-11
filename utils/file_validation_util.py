@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple
 
 from defusedxml import ElementTree as DefusedET
+from xml.etree.ElementTree import ParseError
 
 DEFAULT_VERSION = os.getenv("PAIN001_DEFAULT_VERSION", "pain.001.001.03")
 REPORT_OUTPUT_DIR = os.path.abspath("files/pain_001_output_reports")
@@ -180,7 +181,7 @@ def _read_file(path: str) -> Optional[str]:
 def _safe_parse(xml_text: str):
     try:
         return DefusedET.fromstring(xml_text), None
-    except DefusedET.ParseError as exc:
+    except ParseError as exc:
         line, _column = getattr(exc, "position", (1, 0))
         return None, f"Line {line} - Invalid XML content."
 
