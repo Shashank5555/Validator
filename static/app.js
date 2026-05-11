@@ -67,7 +67,14 @@ function prettyPrintXml() {
       setStatus('Nothing to format.');
       return;
     }
-    const formatted = formatXml(xmlValue);
+    let formatted = formatXml(xmlValue);
+    for (let i = 0; i < 2; i += 1) {
+      const next = formatXml(formatted);
+      if (next === formatted) {
+        break;
+      }
+      formatted = next;
+    }
     editor.setValue(formatted);
     setStatus('XML formatted.');
   } catch (error) {
