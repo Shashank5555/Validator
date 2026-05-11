@@ -14,6 +14,7 @@ from xml.etree.ElementTree import ParseError
 
 DEFAULT_VERSION = os.getenv("PAIN001_DEFAULT_VERSION", "pain.001.001.03")
 REPORT_OUTPUT_DIR = os.path.abspath("files/pain_001_output_reports")
+INVALID_CURRENCY_CODES = {"XXX"}
 
 
 @dataclass
@@ -255,7 +256,7 @@ def _build_checks(root, xml_text: str) -> Dict[str, object]:
     checks["country_code_passed"] = _country_code_present(root)
     checks["duplicate_msgid_passed"] = _no_duplicates(xml_text, "MsgId")
     checks["duplicate_e2e_passed"] = _no_duplicates(xml_text, "EndToEndId")
-    checks["payment_date_results"] = _payment_date_results(root)
+    checks["payment_date_results"] = _payment_date_results(xml_text)
     return checks
 
 
@@ -408,7 +409,7 @@ def _currency_code_valid(root) -> bool:
 def _is_valid_currency_code(value: str) -> bool:
     if not re.fullmatch(r"[A-Z]{3}", value):
         return False
-    return value != "XXX"
+    return value not in INVALID_CURRENCY_CODES
 
 
 def _parse_iso_date(value: str) -> Optional[date]:
@@ -416,6 +417,10 @@ def _parse_iso_date(value: str) -> Optional[date]:
         return datetime.strptime(value, "%Y-%m-%d").date()
     except ValueError:
         return None
+
+
+def _current_date() -> date:
+    return datetime.now().date()
 
 
 def _find_first_tag_line(xml_text: str, tag: str) -> Tuple[Optional[int], Optional[str]]:
@@ -427,17 +432,31 @@ def _find_first_tag_line(xml_text: str, tag: str) -> Tuple[Optional[int], Option
     return None, None
 
 
-def _payment_date_results(root) -> Dict[str, object]:
-    element = root.find(".//{*}ReqdExctnDt") or root.find(".//{*}ReqdColltnDt")
-    if element is None or not element.text:
-        return {"passed": False, "details": "Missing required payment date."}
-    value = element.text.strip()
+def _payment_date_status(xml_text: str) -> Dict[str, object]:
+    line_no, value = _find_first_tag_line(xml_text, "ReqdExctnDt")
+    if line_no is None:
+        line_no, value = _find_first_tag_line(xml_text, "ReqdColltnDt")
+    if not value:
+        return {"passed": False, "reason": "missing", "line": line_no or 1, "value": None}
     parsed = _parse_iso_date(value)
     if parsed is None:
-        return {"passed": False, "details": f"Invalid date format: {value}"}
-    if parsed < datetime.now().date():
-        return {"passed": False, "details": value}
-    return {"passed": True, "details": value}
+        return {"passed": False, "reason": "invalid_format", "line": line_no or 1, "value": value}
+    if parsed < _current_date():
+        return {"passed": False, "reason": "past_date", "line": line_no or 1, "value": value}
+    return {"passed": True, "reason": "ok", "line": line_no or 1, "value": value}
+
+
+def _payment_date_results(xml_text: str) -> Dict[str, object]:
+    status = _payment_date_status(xml_text)
+    if not status["passed"]:
+        reason = status.get("reason")
+        value = status.get("value")
+        if reason == "missing":
+            return {"passed": False, "details": "Missing required payment date."}
+        if reason == "invalid_format":
+            return {"passed": False, "details": f"Invalid date format: {value}"}
+        return {"passed": False, "details": value or ""}
+    return {"passed": True, "details": status.get("value")}
 
 
 def _is_utf8(xml_text: str) -> bool:
