@@ -4,6 +4,7 @@ import csv
 import os
 import re
 import uuid
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple
@@ -48,9 +49,15 @@ def validate_and_compare(xml_path: str, version: str) -> Tuple[bool, List[str], 
 
 
 def write_annotated_html(xml_path: str, errors: List[str], summary: str, output_dir: str) -> str:
-    os.makedirs(output_dir, exist_ok=True)
+    output_root = Path(REPORT_OUTPUT_DIR).resolve()
+    target_dir = Path(output_dir).resolve()
+    try:
+        target_dir.relative_to(output_root)
+    except ValueError:
+        target_dir = output_root
+    os.makedirs(target_dir, exist_ok=True)
     filename = f"report_{uuid.uuid4().hex}.html"
-    output_path = os.path.join(output_dir, filename)
+    output_path = str(target_dir / filename)
 
     xml_text = _read_file(xml_path) or ""
     error_lines = _extract_error_lines(errors)
@@ -179,6 +186,7 @@ def _read_file(path: str) -> Optional[str]:
 
 
 def _safe_parse(xml_text: str):
+    """Parse XML content safely using defusedxml and return (root, error_message)."""
     try:
         return DefusedET.fromstring(xml_text), None
     except ParseError as exc:

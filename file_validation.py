@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 UPLOAD_DIR = "temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 REPORT_DIR = os.path.abspath("files/pain_001_output_reports")
+os.makedirs(REPORT_DIR, exist_ok=True)
 FILENAME_SAFE_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
@@ -196,7 +197,7 @@ async def index():
 try:
     # FastAPI re-exports Starlette's UploadFile; we construct the underlying starlette class.
     from starlette.datastructures import UploadFile as StarletteUploadFile
-except Exception as e:
+except ImportError as e:
     raise RuntimeError("Unable to import Starlette UploadFile. Check your FastAPI/Starlette installation.") from e
 
 # If you have a specific route function name, set it here

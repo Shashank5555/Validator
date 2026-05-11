@@ -30,6 +30,7 @@ const modalHtmlReport = document.getElementById('modal-html-report');
 const modalCsvReport = document.getElementById('modal-csv-report');
 
 const HIGHLIGHT_DURATION_MS = 2000;
+const REPORT_PATH_PREFIX = '/files/download/';
 const THEME_LABELS = {
   dark: 'Light Mode',
   light: 'Dark Mode'
@@ -250,7 +251,7 @@ function updateReportLinks(data) {
 }
 
 function setReportLink(anchor, path) {
-  if (path) {
+  if (path && path.startsWith(REPORT_PATH_PREFIX)) {
     anchor.href = new URL(path, window.location.origin).toString();
     anchor.classList.remove('disabled');
     anchor.removeAttribute('aria-disabled');
@@ -300,7 +301,7 @@ function clearEditor() {
 
 function stripWhitespaceNodes(node) {
   const whitespaceNodes = [];
-  node.childNodes.forEach((child) => {
+  Array.from(node.childNodes).forEach((child) => {
     if (child.nodeType === Node.TEXT_NODE && !child.nodeValue.trim()) {
       whitespaceNodes.push(child);
     } else if (child.nodeType === Node.ELEMENT_NODE) {
