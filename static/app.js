@@ -1,9 +1,16 @@
+const DEFAULT_XML_TEMPLATE = `<Document>
+  <CstmrCdtTrfInitn>
+    <NbOfTxs>1</NbOfTxs>
+    <CtrlSum>0.00</CtrlSum>
+  </CstmrCdtTrfInitn>
+</Document>`;
+
 const editor = CodeMirror(document.getElementById('editor'), {
   mode: 'application/xml',
   theme: 'material-darker',
   lineNumbers: true,
   lineWrapping: false,
-  value: '<Document>\n  <CstmrCdtTrfInitn>\n    <NbOfTxs>1</NbOfTxs>\n    <CtrlSum>0.00</CtrlSum>\n  </CstmrCdtTrfInitn>\n</Document>'
+  value: DEFAULT_XML_TEMPLATE
 });
 
 const fileInput = document.getElementById('file-input');
@@ -119,6 +126,7 @@ function handleValidationResult(data) {
     sideSubtitle.textContent = 'Validation passed.';
     showModal();
   } else {
+    hideModal();
     sidePanel.classList.remove('hidden');
     sideSubtitle.textContent = `${data.errors?.line_errors?.length || 0} issues detected.`;
     renderErrors(data);

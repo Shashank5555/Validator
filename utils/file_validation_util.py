@@ -311,7 +311,7 @@ def _duplicate_errors(xml_text: str) -> List[str]:
 def _duplicate_tag_errors(xml_text: str, tag: str, label: str) -> List[str]:
     errors: List[str] = []
     seen: Dict[str, int] = {}
-    pattern = re.compile(rf"<(?:(?:\\w+):)?{tag}[^>]*>(.*?)</(?:(?:\\w+):)?{tag}>")
+    pattern = re.compile(rf"<(?:(?:\w+):)?{tag}[^>]*>(.*?)</(?:(?:\w+):)?{tag}>")
 
     for line_no, line in enumerate(xml_text.splitlines(), start=1):
         match = pattern.search(line)
@@ -328,7 +328,7 @@ def _duplicate_tag_errors(xml_text: str, tag: str, label: str) -> List[str]:
 
 def _collect_tag_values(xml_text: str, tag: str) -> List[str]:
     values = []
-    pattern = re.compile(rf"<(?:(?:\\w+):)?{tag}[^>]*>(.*?)</(?:(?:\\w+):)?{tag}>")
+    pattern = re.compile(rf"<(?:(?:\w+):)?{tag}[^>]*>(.*?)</(?:(?:\w+):)?{tag}>")
     for line in xml_text.splitlines():
         match = pattern.search(line)
         if match:

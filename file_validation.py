@@ -30,89 +30,96 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/validate")
 async def validate_file(file: UploadFile = File(...)):
-    unique_id = uuid.uuid4().hex
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in [".xml", ".csv"]:
-        raise HTTPException(status_code=400, detail="Only XML or CSV files are supported.")
+    try:
+        unique_id = uuid.uuid4().hex
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in [".xml", ".csv"]:
+            raise HTTPException(status_code=400, detail="Only XML or CSV files are supported.")
 
-    file_path = os.path.join(UPLOAD_DIR, f"{unique_id}_{file.filename}")
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        file_path = os.path.join(UPLOAD_DIR, f"{unique_id}_{file.filename}")
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    # Get version
-    if ext == ".csv":
-        version = get_version_from_filename(file.filename) or prompt_for_version(file.filename)
-        if not version:
-            return JSONResponse(status_code=400, content={"error": "Could not determine version from filename."})
-        from utils.file_validation_util import generate_xml_from_csv
+        # Get version
+        if ext == ".csv":
+            version = get_version_from_filename(file.filename) or prompt_for_version(file.filename)
+            if not version:
+                return JSONResponse(status_code=400, content={"error": "Could not determine version from filename."})
+            from utils.file_validation_util import generate_xml_from_csv
 
-        xml_path = generate_xml_from_csv(file_path, version)
-        if not xml_path:
-            return JSONResponse(status_code=500, content={"error": "Failed to generate XML from CSV."})
-    else:
-        version = get_version_from_xml(file_path) or prompt_for_version(file.filename)
-        if not version:
-            return JSONResponse(status_code=400, content={"error": "Could not determine version from XML."})
-        xml_path = file_path
+            xml_path = generate_xml_from_csv(file_path, version)
+            if not xml_path:
+                return JSONResponse(status_code=500, content={"error": "Failed to generate XML from CSV."})
+        else:
+            version = get_version_from_xml(file_path) or prompt_for_version(file.filename)
+            if not version:
+                return JSONResponse(status_code=400, content={"error": "Could not determine version from XML."})
+            xml_path = file_path
 
-    # Run validation
-    passed, errors, diffs, extra_info = validate_and_compare(xml_path, version)
+        # Run validation
+        passed, errors, diffs, extra_info = validate_and_compare(xml_path, version)
 
-    # Generate reports
-    html_path = write_annotated_html(
-        xml_path,
-        errors,
-        "See console summary",
-        output_dir="files/pain_001_output_reports",
-    )
-    csv_report_path = write_individual_report(
-        os.path.basename(file.filename),
-        version,
-        "CSV" if ext == ".csv" else "XML",
-        passed,
-        errors,
-        diffs,
-    )
+        # Generate reports
+        html_path = write_annotated_html(
+            xml_path,
+            errors,
+            "See console summary",
+            output_dir="files/pain_001_output_reports",
+        )
+        csv_report_path = write_individual_report(
+            os.path.basename(file.filename),
+            version,
+            "CSV" if ext == ".csv" else "XML",
+            passed,
+            errors,
+            diffs,
+        )
 
-    # Build response
-    return {
-        "status": "PASSED" if passed else "FAILED",
-        "filename": file.filename,
-        "version": version,
-        "errors": parse_structured_errors(errors),
-        "info_messages": extra_info.get("info_messages", []),
-        "checks": {
-            "NbOfTxs": extra_info.get("nboftxs_passed"),
-            "CtrlSum": extra_info.get("ctrlsum_passed"),
-            "Purpose Code": extra_info.get("purpose_code_passed"),
-            "UTF-8 Encoding": extra_info.get("utf8_encoding_passed"),
-            "Currency Code": extra_info.get("currency_code_passed"),
-            "Duplicate Message ID": extra_info.get("duplicate_msgid_passed"),
-            "IBAN checksum": extra_info.get("iban_passed"),
-            "MmbId": extra_info.get("mmbid_passed"),
-            "Country Code": extra_info.get("country_code_passed"),
-            "Duplicate EndToEndId": extra_info.get("duplicate_e2e_passed"),
-            "Payment Dates": extra_info.get("payment_date_results", {}),
-        },
-        "html_report_url": f"/files/download/html/{os.path.basename(html_path)}",
-        "csv_report_url": f"/files/download/csv/{os.path.basename(csv_report_path)}",
-    }
+        # Build response
+        return {
+            "status": "PASSED" if passed else "FAILED",
+            "filename": file.filename,
+            "version": version,
+            "errors": parse_structured_errors(errors),
+            "info_messages": extra_info.get("info_messages", []),
+            "checks": {
+                "NbOfTxs": extra_info.get("nboftxs_passed"),
+                "CtrlSum": extra_info.get("ctrlsum_passed"),
+                "Purpose Code": extra_info.get("purpose_code_passed"),
+                "UTF-8 Encoding": extra_info.get("utf8_encoding_passed"),
+                "Currency Code": extra_info.get("currency_code_passed"),
+                "Duplicate Message ID": extra_info.get("duplicate_msgid_passed"),
+                "IBAN checksum": extra_info.get("iban_passed"),
+                "MmbId": extra_info.get("mmbid_passed"),
+                "Country Code": extra_info.get("country_code_passed"),
+                "Duplicate EndToEndId": extra_info.get("duplicate_e2e_passed"),
+                "Payment Dates": extra_info.get("payment_date_results", {}),
+            },
+            "html_report_url": f"/files/download/html/{os.path.basename(html_path)}",
+            "csv_report_url": f"/files/download/csv/{os.path.basename(csv_report_path)}",
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Validation failed.")
 
 
 @router.get("/download/html/{filename}")
 async def download_html(filename: str):
-    file_path = os.path.join("files/pain_001_output_reports", filename)
+    safe_name = os.path.basename(filename)
+    file_path = os.path.join("files/pain_001_output_reports", safe_name)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="HTML report not found.")
-    return FileResponse(path=file_path, media_type="text/html", filename=filename)
+    return FileResponse(path=file_path, media_type="text/html", filename=safe_name)
 
 
 @router.get("/download/csv/{filename}")
 async def download_csv(filename: str):
-    file_path = os.path.join("files/pain_001_output_reports", filename)
+    safe_name = os.path.basename(filename)
+    file_path = os.path.join("files/pain_001_output_reports", safe_name)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="CSV report not found.")
-    return FileResponse(path=file_path, media_type="text/csv", filename=filename)
+    return FileResponse(path=file_path, media_type="text/csv", filename=safe_name)
 
 
 def parse_structured_errors(errors: list):
@@ -230,7 +237,7 @@ except Exception as e:
 
 # If you have a specific route function name, set it here
 # e.g., ROUTE_FUNC_NAME = "validate_pain001"
-ROUTE_FUNC_NAME: Optional[str] = "validate_file"  # leave None to auto-detect
+ROUTE_FUNC_NAME: Optional[str] = None  # leave None to auto-detect
 
 # Candidate function names to look for if ROUTE_FUNC_NAME not set
 _POSSIBLE_ROUTE_FUNCS = (
@@ -293,9 +300,7 @@ async def validate_via_route_async(contents: bytes, filename: str) -> Dict[str, 
     if inspect.iscoroutinefunction(route_fn):
         return await route_fn(upload)  # type: ignore[arg-type]
     else:
-        import anyio
-
-        return await anyio.to_thread.run_sync(lambda: route_fn(upload))  # type: ignore[arg-type]
+        return await asyncio.to_thread(lambda: route_fn(upload))  # type: ignore[arg-type]
 
 
 def validate_via_route(contents: bytes, filename: str) -> Dict[str, Any]:
