@@ -320,7 +320,7 @@ def _build_check_errors(xml_text: str, checks: Dict[str, object], existing_error
     if checks.get("currency_code_passed") is False and not has_label("Currency Code"):
         line_no, value = tag_line("Ccy")
         if value:
-            add_error(line_no, "Invalid Currency Code.", value)
+            add_error(line_no, f"Invalid Currency Code found: {value}")
         else:
             add_error(line_no, "Missing Currency Code.")
 
@@ -347,22 +347,20 @@ def _build_check_errors(xml_text: str, checks: Dict[str, object], existing_error
 
     payment_results = checks.get("payment_date_results", {})
     if isinstance(payment_results, dict) and payment_results.get("passed") is False and not has_label("payment"):
-        line_no, value = tag_line("ReqdExctnDt")
-        if line_no is None:
-            line_no, value = tag_line("ReqdColltnDt")
-        if not value:
+        status = _payment_date_status(xml_text)
+        line_no = status.get("line")
+        value = status.get("value")
+        reason = status.get("reason")
+        if reason == "missing":
             add_error(line_no, "Missing required payment date.")
-        else:
-            parsed = _parse_iso_date(value)
-            if parsed is None:
-                add_error(line_no, "Invalid payment date format.", value)
-            else:
-                if parsed < datetime.now().date():
-                    add_error(
-                        line_no,
-                        "ACH payment must have execution date today or in the future.",
-                        value,
-                    )
+        elif reason == "invalid_format":
+            add_error(line_no, "Invalid payment date format.", value if isinstance(value, str) else None)
+        elif reason == "past_date":
+            add_error(
+                line_no,
+                "ACH payment must have execution date today or in the future.",
+                value if isinstance(value, str) else None,
+            )
 
     return errors
 
