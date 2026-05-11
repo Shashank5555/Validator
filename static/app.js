@@ -230,12 +230,22 @@ function buildSummaryItem(label, value) {
 }
 
 function updateReportLinks(data) {
-  const htmlUrl = new URL(data.html_report_url || '#', window.location.origin).toString();
-  const csvUrl = new URL(data.csv_report_url || '#', window.location.origin).toString();
-  htmlReport.href = htmlUrl;
-  csvReport.href = csvUrl;
-  modalHtmlReport.href = htmlUrl;
-  modalCsvReport.href = csvUrl;
+  setReportLink(htmlReport, data.html_report_url);
+  setReportLink(csvReport, data.csv_report_url);
+  setReportLink(modalHtmlReport, data.html_report_url);
+  setReportLink(modalCsvReport, data.csv_report_url);
+}
+
+function setReportLink(anchor, path) {
+  if (path) {
+    anchor.href = new URL(path, window.location.origin).toString();
+    anchor.classList.remove('disabled');
+    anchor.removeAttribute('aria-disabled');
+  } else {
+    anchor.removeAttribute('href');
+    anchor.classList.add('disabled');
+    anchor.setAttribute('aria-disabled', 'true');
+  }
 }
 
 function showModal() {

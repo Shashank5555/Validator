@@ -248,6 +248,12 @@ body {
   text-decoration: underline;
 }
 
+.report-links a.disabled {
+  color: var(--muted);
+  pointer-events: none;
+  text-decoration: none;
+}
+
 .summary-list {
   list-style: none;
   padding: 0;

@@ -1,24 +1,30 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, APIRouter
+import asyncio
+import inspect
+import logging
+import mimetypes
+import os
+import re
+import shutil
+import uuid
+from io import BytesIO
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
+
+from dotenv import load_dotenv
+from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-import shutil
-import os
-import uuid
+from pydantic import BaseModel
+
+from sftp import SFTPClient, SFTPConfig
 from utils.file_validation_util import (
-    validate_and_compare,
-    write_annotated_html,
-    write_individual_report,
     get_version_from_filename,
     get_version_from_xml,
     prompt_for_version,
+    validate_and_compare,
+    write_annotated_html,
+    write_individual_report,
 )
-from datetime import datetime
-from pydantic import BaseModel
-from dotenv import load_dotenv
-from sftp import SFTPClient, SFTPConfig
-from pathlib import Path
-import logging
-import re
 
 router = APIRouter(prefix="/files", tags=["Files"])
 
@@ -34,10 +40,13 @@ REPORT_DIR = os.path.abspath("files/pain_001_output_reports")
 
 def _safe_report_path(filename: str) -> tuple[str, str]:
     safe_name = os.path.basename(filename)
-    file_path = os.path.abspath(os.path.join(REPORT_DIR, safe_name))
-    if not file_path.startswith(REPORT_DIR + os.sep):
+    file_path = (Path(REPORT_DIR) / safe_name).resolve()
+    report_root = Path(REPORT_DIR).resolve()
+    try:
+        file_path.relative_to(report_root)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report filename.")
-    return file_path, safe_name
+    return str(file_path), safe_name
 
 
 @router.post("/validate")
@@ -234,17 +243,11 @@ async def index():
 
 # ==== ADAPTER: call FastAPI route function without HTTP ======================
 # Put this at the END of file_validation.py (after your current code).
-from io import BytesIO
-import mimetypes
-import inspect
-import asyncio
-from typing import Any, Callable, Dict, Optional
-
 try:
     # FastAPI re-exports Starlette's UploadFile; we construct the underlying starlette class.
     from starlette.datastructures import UploadFile as StarletteUploadFile
 except Exception as e:
-    raise RuntimeError("Starlette/FastAPI not installed. Please `pip install fastapi starlette`.") from e
+    raise RuntimeError("Unable to import Starlette UploadFile. Check your FastAPI/Starlette installation.") from e
 
 # If you have a specific route function name, set it here
 # e.g., ROUTE_FUNC_NAME = "validate_pain001"
@@ -286,8 +289,8 @@ def _find_route_func() -> Callable:
 
     raise RuntimeError(
         "No validator route function found.\n"
-        "Add ROUTE_FUNC_NAME='your_route_function' above, or ensure your function "
-        "name contains 'validate' (e.g., validate_pain001)."
+        "Set ROUTE_FUNC_NAME near the adapter section to your route function name, "
+        "or ensure your function name contains 'validate' (e.g., validate_pain001)."
     )
 
 
