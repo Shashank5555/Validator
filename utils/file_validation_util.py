@@ -41,10 +41,11 @@ def validate_and_compare(xml_path: str, version: str) -> Tuple[bool, List[str], 
         extra_info.update(_default_checks(False))
         return False, errors, diffs, extra_info
 
-    extra_info.update(_build_checks(root, xml_text))
+    checks = _build_checks(root, xml_text)
+    extra_info.update(checks)
     errors.extend(_duplicate_errors(xml_text))
 
-    passed = len(errors) == 0
+    passed = len(errors) == 0 and _checks_all_passed(checks)
     return passed, errors, diffs, extra_info
 
 
@@ -255,6 +256,23 @@ def _build_checks(root, xml_text: str) -> Dict[str, object]:
     checks["duplicate_e2e_passed"] = _no_duplicates(xml_text, "EndToEndId")
     checks["payment_date_results"] = _payment_date_results(root)
     return checks
+
+
+def _checks_all_passed(checks: Dict[str, object]) -> bool:
+    results = []
+    for value in checks.values():
+        if isinstance(value, bool):
+            results.append(value)
+            continue
+        if isinstance(value, dict):
+            passed_value = value.get("passed")
+            if isinstance(passed_value, bool):
+                results.append(passed_value)
+                continue
+            nested = [item for item in value.values() if isinstance(item, bool)]
+            if nested:
+                results.append(all(nested))
+    return all(results) if results else True
 
 
 def _has_numeric(root, tag: str) -> bool:

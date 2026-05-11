@@ -256,6 +256,9 @@ body[data-theme="light"] .CodeMirror {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .error-item {
@@ -384,35 +387,6 @@ body[data-theme="light"] .CodeMirror {
 .status-bar.success {
   border-top-color: rgba(76, 217, 100, 0.5);
   background: rgba(76, 217, 100, 0.08);
-}
-
-.modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(6, 10, 18, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  z-index: 20;
-}
-
-.modal.hidden {
-  display: none;
-}
-
-.modal-content {
-  width: min(560px, 90vw);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px 20px 20px;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 @media (max-width: 900px) {

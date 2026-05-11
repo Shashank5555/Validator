@@ -24,11 +24,6 @@ const summaryStatus = document.getElementById('summary-status');
 const sideSubtitle = document.getElementById('side-subtitle');
 const htmlReport = document.getElementById('html-report');
 const csvReport = document.getElementById('csv-report');
-const summaryModal = document.getElementById('summary-modal');
-const modalSummaryList = document.getElementById('modal-summary-list');
-const modalStatus = document.getElementById('modal-status');
-const modalHtmlReport = document.getElementById('modal-html-report');
-const modalCsvReport = document.getElementById('modal-csv-report');
 
 const HIGHLIGHT_DURATION_MS = 2000;
 const REPORT_PATH_PREFIX = '/files/download/';
@@ -38,6 +33,10 @@ const THEME_LABELS = {
 };
 
 let currentHighlight = null;
+let currentFileName = null;
+let currentFileExtension = '.xml';
+
+const ALLOWED_EXTENSIONS = ['.xml', '.csv'];
 
 function setStatus(message, variant = '') {
   statusMessage.textContent = message;
@@ -45,6 +44,26 @@ function setStatus(message, variant = '') {
   if (variant) {
     statusBar.classList.add(variant);
   }
+}
+
+function getFileExtension(filename) {
+  const match = filename ? filename.toLowerCase().match(/\.[^./\\]+$/) : null;
+  return match ? match[0] : '';
+}
+
+function isAllowedExtension(extension) {
+  return ALLOWED_EXTENSIONS.includes(extension);
+}
+
+function setCurrentFile(file) {
+  if (!file) {
+    currentFileName = null;
+    currentFileExtension = '.xml';
+    return;
+  }
+  currentFileName = file.name || 'editor.xml';
+  const extension = getFileExtension(currentFileName) || '.xml';
+  currentFileExtension = isAllowedExtension(extension) ? extension : '.xml';
 }
 
 function openFilePicker() {
@@ -59,6 +78,20 @@ function loadFile(file) {
     setStatus(`Loaded ${file.name}`);
   };
   reader.readAsText(file);
+}
+
+function handleFileSelection(file) {
+  if (!file) {
+    return;
+  }
+  const extension = getFileExtension(file.name);
+  if (!isAllowedExtension(extension)) {
+    setCurrentFile(null);
+    setStatus('Only XML or CSV files can be uploaded.', 'error');
+    return;
+  }
+  setCurrentFile(file);
+  loadFile(file);
 }
 
 function prettyPrintXml() {
@@ -121,7 +154,12 @@ async function validateXml() {
   setStatus('Validating...', '');
   const xmlContent = editor.getValue();
   const formData = new FormData();
-  const file = new File([xmlContent], 'editor.xml', { type: 'text/xml' });
+  const extension = isAllowedExtension(currentFileExtension) ? currentFileExtension : '.xml';
+  const safeName = currentFileName && isAllowedExtension(getFileExtension(currentFileName))
+    ? currentFileName
+    : `editor${extension}`;
+  const mimeType = extension === '.csv' ? 'text/csv' : 'text/xml';
+  const file = new File([xmlContent], safeName, { type: mimeType });
   formData.append('file', file);
 
   try {
@@ -142,24 +180,22 @@ async function validateXml() {
 }
 
 function handleValidationResult(data) {
-  const status = data.status || 'FAILED';
-  const isPassed = status === 'PASSED';
+  const lineErrors = data.errors?.line_errors || [];
+  const additional = data.errors?.additional_error_details || [];
+  const hasErrors = lineErrors.length > 0 || additional.length > 0;
+  const apiStatus = data.status || '';
+  const isPassed = apiStatus === 'PASSED' && !hasErrors;
+  const displayStatus = isPassed ? 'PASSED' : 'FAILED';
 
-  setStatus(`Validation ${status.toLowerCase()}.`, isPassed ? 'success' : 'error');
+  setStatus(`Validation ${displayStatus.toLowerCase()}.`, isPassed ? 'success' : 'error');
   updateReportLinks(data);
   renderSummary(data, summaryList, summaryStatus);
-  renderSummary(data, modalSummaryList, modalStatus);
-
-  if (isPassed) {
-    sidePanel.classList.add('hidden');
-    sideSubtitle.textContent = 'Validation passed.';
-    showModal();
-  } else {
-    hideModal();
-    sidePanel.classList.remove('hidden');
-    sideSubtitle.textContent = `${data.errors?.line_errors?.length || 0} issues detected.`;
-    renderErrors(data);
-  }
+  renderErrors(data);
+  sidePanel.classList.remove('hidden');
+  sideSubtitle.textContent = hasErrors
+    ? `${lineErrors.length + additional.length} issues detected.`
+    : 'Validation passed.';
+  switchTab(hasErrors ? 'errors' : 'summary');
 }
 
 function renderErrors(data) {
@@ -177,18 +213,33 @@ function renderErrors(data) {
   }
 
   lineErrors.forEach((err) => {
+    const lineNumber = Number.parseInt(
+      err?.line_no ?? err?.line ?? err?.line_number ?? err?.lineNumber,
+      10
+    );
+    const hasLineNumber = Number.isFinite(lineNumber);
+    const message =
+      err?.message ||
+      err?.detail ||
+      err?.error ||
+      err?.description ||
+      'Unknown validation error.';
     const item = document.createElement('li');
     item.className = 'error-item';
     item.innerHTML = `
-      <div class="error-line">Line ${err.line_no}</div>
-      <div class="error-message">${err.message}</div>
+      <div class="error-line">${hasLineNumber ? `Line ${lineNumber}` : 'Line details unavailable'}</div>
+      <div class="error-message">${message}</div>
     `;
-    item.addEventListener('click', () => focusLine(err.line_no));
+    if (hasLineNumber) {
+      item.addEventListener('click', () => focusLine(lineNumber));
+    }
     errorList.appendChild(item);
   });
 
   if (additional.length) {
-    additionalErrors.textContent = additional.join(' | ');
+    additionalErrors.textContent = additional
+      .map((entry) => (typeof entry === 'string' ? entry : JSON.stringify(entry)))
+      .join(' | ');
   }
 }
 
@@ -243,9 +294,12 @@ function renderSummary(data, targetList, targetStatus) {
 function buildSummaryItem(label, value) {
   const item = document.createElement('li');
   item.className = 'summary-item';
-  const status = value === true ? 'success' : value === false ? 'fail' : 'unknown';
+  const normalized =
+    typeof value === 'string' ? value.trim().toLowerCase() : value;
+  const boolValue = normalized === 'true' ? true : normalized === 'false' ? false : value;
+  const status = boolValue === true ? 'success' : boolValue === false ? 'fail' : 'unknown';
   const icon = status === 'success' ? '✓' : status === 'fail' ? '✕' : '•';
-  const detail = value && typeof value === 'object' ? JSON.stringify(value) : '';
+  const detail = boolValue && typeof boolValue === 'object' ? JSON.stringify(boolValue) : '';
   item.innerHTML = `
     <span class="status-icon ${status}">${icon}</span>
     <div>
@@ -259,28 +313,33 @@ function buildSummaryItem(label, value) {
 function updateReportLinks(data) {
   setReportLink(htmlReport, data.html_report_url);
   setReportLink(csvReport, data.csv_report_url);
-  setReportLink(modalHtmlReport, data.html_report_url);
-  setReportLink(modalCsvReport, data.csv_report_url);
 }
 
 function setReportLink(anchor, path) {
-  if (path && path.startsWith(REPORT_PATH_PREFIX)) {
-    anchor.href = new URL(path, window.location.origin).toString();
-    anchor.classList.remove('disabled');
-    anchor.removeAttribute('aria-disabled');
-  } else {
+  if (typeof path !== 'string' || !path.trim()) {
     anchor.removeAttribute('href');
     anchor.classList.add('disabled');
     anchor.setAttribute('aria-disabled', 'true');
+    return;
   }
-}
-
-function showModal() {
-  summaryModal.classList.remove('hidden');
-}
-
-function hideModal() {
-  summaryModal.classList.add('hidden');
+  let url;
+  try {
+    url = new URL(path, window.location.origin);
+  } catch (error) {
+    anchor.removeAttribute('href');
+    anchor.classList.add('disabled');
+    anchor.setAttribute('aria-disabled', 'true');
+    return;
+  }
+  if (!['http:', 'https:'].includes(url.protocol) || (!path.startsWith(REPORT_PATH_PREFIX) && url.origin !== window.location.origin)) {
+    anchor.removeAttribute('href');
+    anchor.classList.add('disabled');
+    anchor.setAttribute('aria-disabled', 'true');
+    return;
+  }
+  anchor.href = url.toString();
+  anchor.classList.remove('disabled');
+  anchor.removeAttribute('aria-disabled');
 }
 
 function downloadXml() {
@@ -297,6 +356,7 @@ function downloadXml() {
 
 function clearEditor() {
   editor.setValue('');
+  setCurrentFile(null);
   setStatus('Editor cleared.');
 }
 
@@ -357,9 +417,7 @@ function togglePanel() {
 
 fileInput.addEventListener('change', (event) => {
   const file = event.target.files[0];
-  if (file) {
-    loadFile(file);
-  }
+  handleFileSelection(file);
 });
 
 function bindClick(id, handler) {
@@ -382,14 +440,7 @@ bindClick('theme-toggle', () => {
   const currentTheme = document.body.dataset.theme || DEFAULT_THEME;
   applyTheme(currentTheme === 'light' ? 'dark' : 'light');
 });
-bindClick('close-modal', hideModal);
 bindClick('collapse-btn', togglePanel);
-
-summaryModal.addEventListener('click', (event) => {
-  if (event.target === summaryModal) {
-    hideModal();
-  }
-});
 
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));

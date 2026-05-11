@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Validator</title>
-  <link rel="icon" type="image/png" href="https://github.com/user-attachments/assets/35ace772-d9df-4c78-a773-a29cf079dfe8" />
+  <link rel="icon" type="image/png" href="https://github.com/user-attachments/assets/35655e69-549c-45ff-94d9-1b507382d98d" />
   <link rel="stylesheet" href="/static/vendor/codemirror/codemirror.css" />
   <link rel="stylesheet" href="/static/vendor/codemirror/material-darker.css" />
   <link rel="stylesheet" href="/static/styles.css" />
@@ -13,14 +13,14 @@
   <div class="app">
     <header class="toolbar">
       <div class="toolbar-left">
-        <img class="brand-logo" src="https://github.com/user-attachments/assets/35ace772-d9df-4c78-a773-a29cf079dfe8" alt="LVT LABS logo" />
+        <img class="brand-logo" src="https://github.com/user-attachments/assets/35655e69-549c-45ff-94d9-1b507382d98d" alt="LVT LABS logo" />
         <div class="brand-text">
           <span class="app-title">Validator</span>
-          <span class="brand-subtitle">LVT LABS • XML Validation Suite</span>
+          <span class="brand-subtitle">LVT LABS</span>
         </div>
       </div>
       <div class="toolbar-actions">
-        <button id="upload-btn" class="btn">Upload XML</button>
+        <button id="upload-btn" class="btn">Upload XML/CSV</button>
         <button id="validate-btn" class="btn primary">Validate</button>
         <button id="pretty-btn" class="btn">Pretty Print</button>
         <button id="undo-btn" class="btn">Undo</button>
@@ -77,22 +77,7 @@
     </footer>
   </div>
 
-  <div id="summary-modal" class="modal hidden" role="dialog" aria-modal="true">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>Validation Summary</h2>
-        <button id="close-modal" class="icon-btn" aria-label="Close summary">✕</button>
-      </div>
-      <div id="modal-status" class="summary-status"></div>
-      <ul id="modal-summary-list" class="summary-list"></ul>
-      <div class="report-links">
-        <a id="modal-html-report" href="#" target="_blank" rel="noopener">Open HTML Report</a>
-        <a id="modal-csv-report" href="#" target="_blank" rel="noopener">Download CSV</a>
-      </div>
-    </div>
-  </div>
-
-  <input type="file" id="file-input" accept=".xml" hidden />
+  <input type="file" id="file-input" accept=".xml,.csv" hidden />
 
   <script src="/static/vendor/codemirror/codemirror.js"></script>
   <script src="/static/vendor/codemirror/xml.js"></script>
