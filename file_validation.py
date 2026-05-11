@@ -35,18 +35,24 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 REPORT_DIR = os.path.abspath("files/pain_001_output_reports")
 os.makedirs(REPORT_DIR, exist_ok=True)
 FILENAME_SAFE_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+REPORT_REGISTRY: Dict[str, Dict[str, str]] = {"html": {}, "csv": {}}
 
 
-def _safe_report_path(filename: str) -> Tuple[str, str]:
+def _register_report(report_type: str, file_path: str) -> str:
+    safe_name = os.path.basename(file_path)
+    REPORT_REGISTRY.setdefault(report_type, {})[safe_name] = file_path
+    return safe_name
+
+
+def _safe_report_path(report_type: str, filename: str) -> Tuple[str, str]:
     if not filename or "\x00" in filename:
         raise HTTPException(status_code=400, detail="Invalid report filename.")
     safe_name = Path(filename).name
     if safe_name != filename or not FILENAME_SAFE_RE.match(safe_name):
         raise HTTPException(status_code=400, detail="Invalid report filename.")
-    report_root = Path(REPORT_DIR).resolve()
-    for entry in report_root.iterdir():
-        if entry.is_file() and entry.name == safe_name:
-            return str(entry.resolve()), safe_name
+    file_path = REPORT_REGISTRY.get(report_type, {}).get(safe_name)
+    if file_path:
+        return file_path, safe_name
     raise HTTPException(status_code=404, detail="Report not found.")
 
 
@@ -105,6 +111,8 @@ async def validate_file(file: UploadFile = File(...)):
             errors,
             diffs,
         )
+        html_name = _register_report("html", html_path)
+        csv_name = _register_report("csv", csv_report_path)
 
         # Build response
         return {
@@ -126,8 +134,8 @@ async def validate_file(file: UploadFile = File(...)):
                 "Duplicate EndToEndId": extra_info.get("duplicate_e2e_passed"),
                 "Payment Dates": extra_info.get("payment_date_results", {}),
             },
-            "html_report_url": f"/files/download/html/{os.path.basename(html_path)}",
-            "csv_report_url": f"/files/download/csv/{os.path.basename(csv_report_path)}",
+            "html_report_url": f"/files/download/html/{html_name}",
+            "csv_report_url": f"/files/download/csv/{csv_name}",
         }
     except HTTPException:
         raise
@@ -138,13 +146,13 @@ async def validate_file(file: UploadFile = File(...)):
 
 @router.get("/download/html/{filename}")
 async def download_html(filename: str):
-    file_path, safe_name = _safe_report_path(filename)
+    file_path, safe_name = _safe_report_path("html", filename)
     return FileResponse(path=file_path, media_type="text/html", filename=safe_name)
 
 
 @router.get("/download/csv/{filename}")
 async def download_csv(filename: str):
-    file_path, safe_name = _safe_report_path(filename)
+    file_path, safe_name = _safe_report_path("csv", filename)
     return FileResponse(path=file_path, media_type="text/csv", filename=safe_name)
 
 
