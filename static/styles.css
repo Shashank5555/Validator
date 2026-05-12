@@ -65,8 +65,8 @@ body {
 }
 
 .brand-logo {
-  width: 44px;
-  height: 44px;
+  width: 54px;
+  height: 54px;
   object-fit: contain;
 }
 
@@ -78,7 +78,7 @@ body {
 
 .app-title {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 20px;
   letter-spacing: 0.4px;
   background: linear-gradient(120deg, var(--accent-alt), var(--accent));
   -webkit-background-clip: text;
@@ -86,7 +86,7 @@ body {
 }
 
 .brand-subtitle {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 1.2px;
   text-transform: uppercase;
@@ -177,16 +177,6 @@ body[data-theme="light"] .CodeMirror {
   display: none;
 }
 
-.side-panel.collapsed {
-  width: 48px;
-}
-
-.side-panel.collapsed .side-body,
-.side-panel.collapsed .side-tabs,
-.side-panel.collapsed .side-subtitle {
-  display: none;
-}
-
 .side-header {
   display: flex;
   justify-content: space-between;
@@ -210,9 +200,14 @@ body[data-theme="light"] .CodeMirror {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 6px;
   cursor: pointer;
+}
+
+.close-btn {
+  font-size: 16px;
+  line-height: 1;
 }
 
 .side-tabs {
@@ -275,20 +270,20 @@ body[data-theme="light"] .CodeMirror {
 }
 
 .error-line {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--warning);
   margin-bottom: 4px;
 }
 
 .error-message {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
 }
 
 .additional-errors {
   margin-top: 12px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .report-links {
@@ -301,7 +296,7 @@ body[data-theme="light"] .CodeMirror {
 .report-links a {
   color: var(--accent);
   text-decoration: none;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .report-links a:hover {

@@ -157,7 +157,7 @@ async function validateXml() {
   const extension = isAllowedExtension(currentFileExtension) ? currentFileExtension : '.xml';
   const safeName = currentFileName && isAllowedExtension(getFileExtension(currentFileName))
     ? currentFileName
-    : `editor${extension}`;
+    : 'editor.xml';
   const mimeType = extension === '.csv' ? 'text/csv' : 'text/xml';
   const file = new File([xmlContent], safeName, { type: mimeType });
   formData.append('file', file);
@@ -202,7 +202,29 @@ function renderErrors(data) {
   errorList.innerHTML = '';
   additionalErrors.textContent = '';
 
-  const lineErrors = data.errors?.line_errors || [];
+  const lineErrors = [...(data.errors?.line_errors || [])]
+    .map((err) => {
+      const lineNumber = Number.parseInt(
+        err?.line_no ?? err?.line ?? err?.line_number ?? err?.lineNumber,
+        10
+      );
+      return { err, lineNumber };
+    })
+    .sort((a, b) => {
+      const aHasLine = Number.isFinite(a.lineNumber);
+      const bHasLine = Number.isFinite(b.lineNumber);
+      if (aHasLine && bHasLine) {
+        return a.lineNumber - b.lineNumber;
+      }
+      if (aHasLine) {
+        return -1;
+      }
+      if (bHasLine) {
+        return 1;
+      }
+      return 0;
+    })
+    .map((entry) => entry.err);
   const additional = data.errors?.additional_error_details || [];
 
   if (!lineErrors.length) {
@@ -224,11 +246,12 @@ function renderErrors(data) {
       err?.error ||
       err?.description ||
       'Unknown validation error.';
+    const displayMessage = String(message).replace(/\.\s*$/, '');
     const item = document.createElement('li');
     item.className = 'error-item';
     item.innerHTML = `
       <div class="error-line">${hasLineNumber ? `Line ${lineNumber}` : 'Line details unavailable'}</div>
-      <div class="error-message">${message}</div>
+      <div class="error-message">${displayMessage}</div>
     `;
     if (hasLineNumber) {
       item.addEventListener('click', () => focusLine(lineNumber));
@@ -294,6 +317,10 @@ function renderSummary(data, targetList, targetStatus) {
 function buildSummaryItem(label, value) {
   const item = document.createElement('li');
   item.className = 'summary-item';
+  const displayLabel =
+    typeof label === 'string' && ['passed', 'details'].includes(label.toLowerCase())
+      ? `${label.charAt(0).toUpperCase()}${label.slice(1)}`
+      : label;
   const normalized =
     typeof value === 'string' ? value.trim().toLowerCase() : value;
   const boolValue = normalized === 'true' ? true : normalized === 'false' ? false : value;
@@ -303,7 +330,7 @@ function buildSummaryItem(label, value) {
   item.innerHTML = `
     <span class="status-icon ${status}">${icon}</span>
     <div>
-      <div>${label}</div>
+      <div>${displayLabel}</div>
       ${detail ? `<div class="summary-status">${detail}</div>` : ''}
     </div>
   `;
@@ -409,6 +436,10 @@ function switchTab(tabName) {
   });
 }
 
+function closePanel() {
+  sidePanel.classList.add('hidden');
+}
+
 fileInput.addEventListener('change', (event) => {
   const file = event.target.files[0];
   handleFileSelection(file);
@@ -434,6 +465,7 @@ bindClick('theme-toggle', () => {
   const currentTheme = document.body.dataset.theme || DEFAULT_THEME;
   applyTheme(currentTheme === 'light' ? 'dark' : 'light');
 });
+bindClick('close-panel-btn', closePanel);
 
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
