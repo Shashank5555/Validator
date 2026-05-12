@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LVT</title>
+  <link rel="icon" type="image/png" href="/static/Lvtlabs_logo.png" />
+  <link rel="stylesheet" href="/static/vendor/codemirror/codemirror.css" />
+  <link rel="stylesheet" href="/static/vendor/codemirror/material-darker.css" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div class="toolbar-left">
+        <img class="brand-logo" src="/static/Lvtlabs_logo.png" alt="LVT LABS logo" />
+        <div class="brand-text">
+          <span class="app-title">Validator</span>
+          <span class="brand-subtitle">LVT LABS</span>
+        </div>
+      </div>
+      <div class="toolbar-actions">
+        <button id="upload-btn" class="btn">Upload XML</button>
+        <button id="validate-btn" class="btn primary">Validate</button>
+        <button id="pretty-btn" class="btn">Pretty Print</button>
+        <button id="undo-btn" class="btn">Undo</button>
+        <button id="redo-btn" class="btn">Redo</button>
+        <button id="download-btn" class="btn">Download XML</button>
+        <button id="clear-btn" class="btn">Clear</button>
+        <button id="font-decrease" class="btn">A-</button>
+        <button id="font-increase" class="btn">A+</button>
+        <button id="theme-toggle" class="btn">Light Mode</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="editor-pane">
+        <div id="editor" class="editor"></div>
+      </section>
+
+      <aside id="side-panel" class="side-panel hidden">
+        <div class="side-header">
+          <div>
+            <div class="side-title">Validation Results</div>
+            <div id="side-subtitle" class="side-subtitle">No validation yet.</div>
+          </div>
+          <button id="close-panel-btn" class="icon-btn close-btn" aria-label="Close validation results">
+            ✕
+          </button>
+        </div>
+
+        <div class="side-tabs">
+          <button class="tab-btn active" data-tab="errors">Errors</button>
+          <button class="tab-btn" data-tab="summary">Summary</button>
+        </div>
+
+        <div class="side-body">
+          <div id="errors-panel" class="tab-panel active">
+            <ul id="error-list" class="error-list"></ul>
+            <div id="additional-errors" class="additional-errors"></div>
+            <div class="report-links">
+              <a id="html-report" href="#" target="_blank" rel="noopener">Open HTML Report</a>
+              <a id="csv-report" href="#" target="_blank" rel="noopener">Download CSV</a>
+            </div>
+          </div>
+          <div id="summary-panel" class="tab-panel">
+            <div id="summary-status" class="summary-status"></div>
+            <ul id="summary-list" class="summary-list"></ul>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="status-bar" id="status-bar">
+      <div class="status-label">Validation Output</div>
+      <div class="status-message">Ready.</div>
+    </footer>
+  </div>
+
+  <input type="file" id="file-input" accept=".xml,.csv" aria-label="Upload XML or CSV file" hidden />
+
+  <script src="/static/vendor/codemirror/codemirror.js"></script>
+  <script src="/static/vendor/codemirror/xml.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

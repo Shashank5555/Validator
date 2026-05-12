@@ -1,0 +1,506 @@
+from __future__ import annotations
+
+import csv
+import os
+import re
+import uuid
+from pathlib import Path
+from dataclasses import dataclass
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+from defusedxml import ElementTree as DefusedET
+from xml.etree.ElementTree import ParseError
+
+DEFAULT_VERSION = os.getenv("PAIN001_DEFAULT_VERSION", "pain.001.001.03")
+REPORT_OUTPUT_DIR = os.path.abspath("files/pain_001_output_reports")
+INVALID_CURRENCY_CODES = {"XXX"}
+
+
+@dataclass
+class ValidationResult:
+    passed: bool
+    errors: List[str]
+    diffs: List[str]
+    extra_info: Dict[str, object]
+
+
+def validate_and_compare(xml_path: str, version: str) -> Tuple[bool, List[str], List[str], Dict[str, object]]:
+    errors: List[str] = []
+    diffs: List[str] = []
+    extra_info: Dict[str, object] = {"info_messages": []}
+
+    xml_text = _read_file(xml_path)
+    if xml_text is None:
+        errors.append("Line 1 - File not found or unreadable.")
+        extra_info.update(_default_checks(False))
+        return False, errors, diffs, extra_info
+
+    root, parse_error = _safe_parse(xml_text)
+    if parse_error:
+        errors.append(parse_error)
+        extra_info.update(_default_checks(False))
+        return False, errors, diffs, extra_info
+
+    checks = _build_checks(root, xml_text)
+    extra_info.update(checks)
+    errors.extend(_duplicate_errors(xml_text))
+    errors.extend(_build_check_errors(xml_text, checks, errors))
+
+    passed = len(errors) == 0 and _checks_all_passed(checks)
+    return passed, errors, diffs, extra_info
+
+
+def write_annotated_html(xml_path: str, errors: List[str], summary: str, output_dir: str) -> str:
+    output_root = Path(REPORT_OUTPUT_DIR).resolve()
+    target_dir = Path(output_dir).resolve()
+    try:
+        target_dir.relative_to(output_root)
+    except ValueError:
+        target_dir = output_root
+    os.makedirs(target_dir, exist_ok=True)
+    filename = f"report_{uuid.uuid4().hex}.html"
+    output_path = str(target_dir / filename)
+
+    xml_text = _read_file(xml_path) or ""
+    error_lines = _extract_error_lines(errors)
+    lines = xml_text.splitlines()
+
+    highlighted_lines = []
+    for idx, line in enumerate(lines, start=1):
+        escaped = _escape_html(line)
+        if idx in error_lines:
+            highlighted_lines.append(f"<span class=\"error-line\">{escaped}</span>")
+        else:
+            highlighted_lines.append(escaped)
+
+    summary_text = _escape_html(summary)
+    content = "\n".join(highlighted_lines)
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Validation Report</title>
+  <style>
+    body {{ background: #0f1115; color: #e6e6e6; font-family: Arial, sans-serif; padding: 24px; }}
+    .summary {{ margin-bottom: 16px; font-size: 14px; color: #9aa4b2; }}
+    pre {{ background: #151922; padding: 16px; border-radius: 8px; overflow-x: auto; }}
+    .error-line {{ background: rgba(255, 99, 71, 0.25); display: block; padding: 2px 4px; border-radius: 4px; }}
+  </style>
+</head>
+<body>
+  <div class="summary">{summary_text}</div>
+  <pre>{content}</pre>
+</body>
+</html>"""
+
+    with open(output_path, "w", encoding="utf-8") as handle:
+        handle.write(html)
+
+    return output_path
+
+
+def write_individual_report(
+    filename: str,
+    version: str,
+    file_type: str,
+    passed: bool,
+    errors: List[str],
+    diffs: List[str],
+) -> str:
+    os.makedirs(REPORT_OUTPUT_DIR, exist_ok=True)
+    report_name = f"validation_{uuid.uuid4().hex}.csv"
+    report_path = os.path.join(REPORT_OUTPUT_DIR, report_name)
+
+    with open(report_path, "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["Filename", "Version", "Type", "Status", "Error Count", "Errors"])
+        writer.writerow(
+            [
+                filename,
+                version,
+                file_type,
+                "PASSED" if passed else "FAILED",
+                len(errors),
+                " | ".join(errors) if errors else "",
+            ]
+        )
+
+    return report_path
+
+
+def get_version_from_filename(filename: str) -> Optional[str]:
+    match = re.search(r"(pain\.001\.[\d.]+)", filename, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
+
+
+def get_version_from_xml(xml_path: str) -> Optional[str]:
+    xml_text = _read_file(xml_path)
+    if not xml_text:
+        return None
+    root, parse_error = _safe_parse(xml_text)
+    if parse_error:
+        return None
+    match = re.search(r"pain\.001\.[\d.]+", root.tag)
+    return match.group(0) if match else None
+
+
+def prompt_for_version(filename: str) -> Optional[str]:
+    return DEFAULT_VERSION
+
+
+def generate_xml_from_csv(csv_path: str, version: str) -> Optional[str]:
+    try:
+        with open(csv_path, "r", encoding="utf-8") as handle:
+            reader = csv.reader(handle)
+            rows = list(reader)
+    except OSError:
+        return None
+
+    xml_lines = [
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+        f"<Document xmlns=\"urn:iso:std:iso:20022:tech:xsd:{version}\">",
+    ]
+
+    for row in rows:
+        xml_lines.append("  <Row>")
+        for value in row:
+            xml_lines.append(f"    <Cell>{_escape_xml(value)}</Cell>")
+        xml_lines.append("  </Row>")
+
+    xml_lines.append("</Document>")
+
+    output_path = os.path.splitext(csv_path)[0] + ".xml"
+    try:
+        with open(output_path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(xml_lines))
+    except OSError:
+        return None
+
+    return output_path
+
+
+def _read_file(path: str) -> Optional[str]:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read()
+    except OSError:
+        return None
+
+
+def _safe_parse(xml_text: str) -> Tuple[Optional[Any], Optional[str]]:
+    """Parse XML content safely using defusedxml and return (root, error_message)."""
+    try:
+        return DefusedET.fromstring(xml_text), None
+    except ParseError as exc:
+        line, _column = getattr(exc, "position", (1, 0))
+        return None, f"Line {line} - Invalid XML content."
+
+
+def _extract_error_lines(errors: List[str]) -> Set[int]:
+    line_numbers = set()
+    for err in errors:
+        match = re.search(r"Line (\d+)", err)
+        if match:
+            line_numbers.add(int(match.group(1)))
+    return line_numbers
+
+
+def _escape_html(value: str) -> str:
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
+
+
+def _escape_xml(value: str) -> str:
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
+
+
+def _default_checks(passed: bool) -> Dict[str, object]:
+    return {
+        "nboftxs_passed": passed,
+        "ctrlsum_passed": passed,
+        "purpose_code_passed": passed,
+        "utf8_encoding_passed": passed,
+        "currency_code_passed": passed,
+        "duplicate_msgid_passed": passed,
+        "iban_passed": passed,
+        "mmbid_passed": passed,
+        "country_code_passed": passed,
+        "duplicate_e2e_passed": passed,
+        "payment_date_results": {"passed": passed},
+    }
+
+
+def _build_checks(root, xml_text: str) -> Dict[str, object]:
+    checks = _default_checks(True)
+    checks["nboftxs_passed"] = _has_numeric(root, "NbOfTxs")
+    checks["ctrlsum_passed"] = _has_numeric(root, "CtrlSum")
+    checks["purpose_code_passed"] = _has_text(root, "Purp")
+    checks["utf8_encoding_passed"] = _is_utf8(xml_text)
+    checks["currency_code_passed"] = _currency_code_valid(root)
+    checks["iban_passed"] = _iban_present(root)
+    checks["mmbid_passed"] = _has_text(root, "MmbId")
+    checks["country_code_passed"] = _country_code_present(root)
+    checks["duplicate_msgid_passed"] = _no_duplicates(xml_text, "MsgId")
+    checks["duplicate_e2e_passed"] = _no_duplicates(xml_text, "EndToEndId")
+    checks["payment_date_results"] = _payment_date_results(xml_text)
+    return checks
+
+
+def _checks_all_passed(checks: Dict[str, object]) -> bool:
+    results = []
+    for value in checks.values():
+        if isinstance(value, bool):
+            results.append(value)
+            continue
+        if isinstance(value, dict):
+            passed_value = value.get("passed")
+            if isinstance(passed_value, bool):
+                results.append(passed_value)
+                continue
+            nested = [item for item in value.values() if isinstance(item, bool)]
+            if nested:
+                results.append(all(nested))
+    return all(results) if results else True
+
+
+def _build_check_errors(xml_text: str, checks: Dict[str, object], existing_errors: List[str]) -> List[str]:
+    errors: List[str] = []
+
+    def has_label(label: str) -> bool:
+        return any(label in err for err in existing_errors) or any(label in err for err in errors)
+
+    def add_error(line_no: Optional[int], message: str, found: Optional[str] = None) -> None:
+        if found is not None:
+            message = f"{message} Found: {found}"
+        if line_no is None:
+            errors.append(message)
+        else:
+            errors.append(f"Line {line_no} - {message}")
+
+    def tag_line(tag: str) -> Tuple[Optional[int], Optional[str]]:
+        return _find_first_tag_line(xml_text, tag)
+
+    if checks.get("nboftxs_passed") is False and not has_label("NbOfTxs"):
+        line_no, value = tag_line("NbOfTxs")
+        if value:
+            add_error(line_no, "Invalid NbOfTxs value.", value)
+        else:
+            add_error(line_no, "Missing NbOfTxs.")
+
+    if checks.get("ctrlsum_passed") is False and not has_label("CtrlSum"):
+        line_no, value = tag_line("CtrlSum")
+        if value:
+            add_error(line_no, "Invalid CtrlSum value.", value)
+        else:
+            add_error(line_no, "Missing CtrlSum.")
+
+    if checks.get("purpose_code_passed") is False and not has_label("Purpose Code"):
+        line_no, value = tag_line("Purp")
+        if value:
+            add_error(line_no, "Invalid Purpose Code.", value)
+        else:
+            add_error(line_no, "Missing Purpose Code.")
+
+    if checks.get("utf8_encoding_passed") is False and not has_label("UTF-8"):
+        add_error(1, "Invalid UTF-8 encoding.")
+
+    if checks.get("currency_code_passed") is False and not has_label("Currency Code"):
+        line_no, value = tag_line("Ccy")
+        if value:
+            add_error(line_no, f"Invalid Currency Code found: {value}")
+        else:
+            add_error(line_no, "Missing Currency Code.")
+
+    if checks.get("iban_passed") is False and not has_label("IBAN"):
+        line_no, value = tag_line("IBAN")
+        if value:
+            add_error(line_no, "Invalid IBAN length.", value)
+        else:
+            add_error(line_no, "Missing IBAN.")
+
+    if checks.get("mmbid_passed") is False and not has_label("MmbId"):
+        line_no, value = tag_line("MmbId")
+        if value:
+            add_error(line_no, "Invalid MmbId.", value)
+        else:
+            add_error(line_no, "Missing MmbId.")
+
+    if checks.get("country_code_passed") is False and not has_label("Country Code"):
+        line_no, value = tag_line("Ctry")
+        if value:
+            add_error(line_no, "Invalid Country Code.", value)
+        else:
+            add_error(line_no, "Missing Country Code.")
+
+    payment_results = checks.get("payment_date_results", {})
+    if isinstance(payment_results, dict) and payment_results.get("passed") is False and not has_label("payment"):
+        status = _payment_date_status(xml_text)
+        line_no = status.get("line")
+        value = status.get("value")
+        reason = status.get("reason")
+        if reason == "missing":
+            add_error(line_no, "Missing required payment date.")
+        elif reason == "invalid_format":
+            add_error(line_no, "Invalid payment date format.", value if isinstance(value, str) else None)
+        elif reason == "past_date":
+            add_error(
+                line_no,
+                "ACH payment must have execution date today or in the future.",
+                value if isinstance(value, str) else None,
+            )
+
+    return errors
+
+
+def _has_numeric(root, tag: str) -> bool:
+    element = root.find(f".//{{*}}{tag}")
+    if element is None or element.text is None:
+        return False
+    try:
+        float(element.text.strip())
+        return True
+    except ValueError:
+        return False
+
+
+def _has_text(root, tag: str) -> bool:
+    element = root.find(f".//{{*}}{tag}")
+    return bool(element is not None and element.text and element.text.strip())
+
+
+def _iban_present(root) -> bool:
+    element = root.find(".//{*}IBAN")
+    if element is None or not element.text:
+        return False
+    return len(element.text.strip()) >= 15
+
+
+def _country_code_present(root) -> bool:
+    element = root.find(".//{*}Ctry")
+    if element is None or not element.text:
+        return False
+    value = element.text.strip()
+    return len(value) == 2 and value.isalpha()
+
+
+def _currency_code_valid(root) -> bool:
+    element = root.find(".//{*}Ccy")
+    if element is None or not element.text:
+        return False
+    value = element.text.strip()
+    return _is_valid_currency_code(value)
+
+
+def _is_valid_currency_code(value: str) -> bool:
+    if not re.fullmatch(r"[A-Z]{3}", value):
+        return False
+    return value not in INVALID_CURRENCY_CODES
+
+
+def _parse_iso_date(value: str) -> Optional[date]:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _current_date() -> date:
+    return datetime.now().date()
+
+
+def _find_first_tag_line(xml_text: str, tag: str) -> Tuple[Optional[int], Optional[str]]:
+    pattern = re.compile(rf"<(?:(?:\w+):)?{tag}[^>]*>(.*?)</(?:(?:\w+):)?{tag}>")
+    for line_no, line in enumerate(xml_text.splitlines(), start=1):
+        match = pattern.search(line)
+        if match:
+            return line_no, match.group(1).strip()
+    return None, None
+
+
+def _payment_date_status(xml_text: str) -> Dict[str, object]:
+    line_no, value = _find_first_tag_line(xml_text, "ReqdExctnDt")
+    if line_no is None:
+        line_no, value = _find_first_tag_line(xml_text, "ReqdColltnDt")
+    if not value:
+        return {"passed": False, "reason": "missing", "line": line_no, "value": None}
+    parsed = _parse_iso_date(value)
+    if parsed is None:
+        return {"passed": False, "reason": "invalid_format", "line": line_no, "value": value}
+    if parsed < _current_date():
+        return {"passed": False, "reason": "past_date", "line": line_no, "value": value}
+    return {"passed": True, "reason": "ok", "line": line_no, "value": value}
+
+
+def _payment_date_results(xml_text: str) -> Dict[str, object]:
+    status = _payment_date_status(xml_text)
+    if not status["passed"]:
+        reason = status.get("reason")
+        value = status.get("value")
+        if reason == "missing":
+            return {"passed": False, "details": "Missing required payment date."}
+        if reason == "invalid_format":
+            return {"passed": False, "details": f"Invalid date format: {value}"}
+        return {"passed": False, "details": value or ""}
+    return {"passed": True, "details": status.get("value")}
+
+
+def _is_utf8(xml_text: str) -> bool:
+    try:
+        xml_text.encode("utf-8")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
+def _no_duplicates(xml_text: str, tag: str) -> bool:
+    values = _collect_tag_values(xml_text, tag)
+    return len(values) == len(set(values))
+
+
+def _duplicate_errors(xml_text: str) -> List[str]:
+    errors: List[str] = []
+    errors.extend(_duplicate_tag_errors(xml_text, "MsgId", "Duplicate Message ID"))
+    errors.extend(_duplicate_tag_errors(xml_text, "EndToEndId", "Duplicate EndToEndId"))
+    return errors
+
+
+def _duplicate_tag_errors(xml_text: str, tag: str, label: str) -> List[str]:
+    errors: List[str] = []
+    seen: Dict[str, int] = {}
+    pattern = re.compile(rf"<(?:(?:\w+):)?{tag}[^>]*>(.*?)</(?:(?:\w+):)?{tag}>")
+
+    for line_no, line in enumerate(xml_text.splitlines(), start=1):
+        match = pattern.search(line)
+        if not match:
+            continue
+        value = match.group(1).strip()
+        if value in seen:
+            errors.append(f"Line {line_no} - {label}. Found: {value}")
+        else:
+            seen[value] = line_no
+
+    return errors
+
+
+def _collect_tag_values(xml_text: str, tag: str) -> List[str]:
+    values = []
+    pattern = re.compile(rf"<(?:(?:\w+):)?{tag}[^>]*>(.*?)</(?:(?:\w+):)?{tag}>")
+    for line in xml_text.splitlines():
+        match = pattern.search(line)
+        if match:
+            values.append(match.group(1).strip())
+    return values
